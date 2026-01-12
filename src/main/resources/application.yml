@@ -1,1 +1,5 @@
-SECRET_KEY: 2ffasvaVBSDSCLAeac4535tb
+security:
+  jwt:
+    secret: "2ffasvaVBSDSCLAeac4535tb"
+    access-token-expiration: 15m
+    refresh-token-expiration: 7d

@@ -1,15 +1,14 @@
 package org.example.service;
 
-import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.JwtException;
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
+import io.jsonwebtoken.*;
+import io.jsonwebtoken.security.Keys;
 import lombok.RequiredArgsConstructor;
+import org.example.config.JwtProperties;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
-import io.jsonwebtoken.security.Keys;
 
+import java.nio.charset.StandardCharsets;
 import java.security.Key;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -18,48 +17,78 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class JwtService {
 
-    private final String SECRET_KEY;
-    private static final long ACCESS_TOKEN_EXPIRATION = 1000 * 60 * 15;
-    private static final long REFRESH_TOKEN_EXPIRATION = 1000L * 60 * 60 * 24 * 7;
+    private final JwtProperties jwtProperties;
 
     private Key getSigningKey() {
-        return Keys.hmacShaKeyFor(SECRET_KEY.getBytes());
+        return Keys.hmacShaKeyFor(
+                jwtProperties.getSecret().getBytes(StandardCharsets.UTF_8)
+        );
     }
 
-    private String generateAccessToken(UserDetails user) {
+    public String generateAccessToken(UserDetails user) {
+        return buildToken(
+                user,
+                jwtProperties.getAccessTokenExpiration().toMillis(),
+                true
+        );
+    }
+
+    public String generateRefreshToken(UserDetails user) {
+        return buildToken(
+                user,
+                jwtProperties.getRefreshTokenExpiration().toMillis(),
+                false
+        );
+    }
+
+    private String buildToken(
+            UserDetails user,
+            long expirationMillis,
+            boolean includeRoles
+    ) {
         Map<String, Object> claims = new HashMap<>();
-        claims.put("roles", user.getAuthorities().stream()
-                .map(GrantedAuthority::getAuthority)
-                .collect(Collectors.toList()));
+
+        if (includeRoles) {
+            claims.put(
+                    "roles",
+                    user.getAuthorities().stream()
+                            .map(GrantedAuthority::getAuthority)
+                            .collect(Collectors.toList())
+            );
+        }
 
         return Jwts.builder()
                 .setClaims(claims)
-                .setSubject(user.getUsername())
+                .setSubject(user.getUsername()) // email
                 .setIssuedAt(new Date())
-                .setExpiration(new Date(System.currentTimeMillis() + ACCESS_TOKEN_EXPIRATION))
-                .signWith(getSigningKey(), SignatureAlgorithm.HS256)
-                .compact();
-    }
-
-    private String generateRefreshToken(UserDetails user) {
-        return Jwts.builder()
-                .setSubject(user.getUsername())
-                .setIssuedAt(new Date())
-                .setExpiration(new Date(System.currentTimeMillis() + REFRESH_TOKEN_EXPIRATION))
+                .setExpiration(new Date(System.currentTimeMillis() + expirationMillis))
                 .signWith(getSigningKey(), SignatureAlgorithm.HS256)
                 .compact();
     }
 
     public boolean isTokenValid(String token) {
-        try{
+        try {
             Jwts.parserBuilder()
                     .setSigningKey(getSigningKey())
                     .build()
                     .parseClaimsJws(token);
             return true;
-        } catch(JwtException | IllegalArgumentException e){
+        } catch (JwtException | IllegalArgumentException e) {
             return false;
         }
+    }
+
+    public String extractUsername(String token) {
+        return parseClaims(token).getSubject();
+    }
+
+    public List<GrantedAuthority> extractRoles(String token) {
+        List<String> roles = parseClaims(token).get("roles", List.class);
+        if (roles == null) return Collections.emptyList();
+
+        return roles.stream()
+                .map(role -> (GrantedAuthority) () -> role)
+                .collect(Collectors.toList());
     }
 
     private Claims parseClaims(String token) {
@@ -69,17 +98,4 @@ public class JwtService {
                 .parseClaimsJws(token)
                 .getBody();
     }
-
-    public String extractUsername(String token) {
-        return parseClaims(token).getSubject();
-    }
-
-    public List<GrantedAuthority> extractRoles(String token) {
-        Claims claims = parseClaims(token);
-        List<String> roles = claims.get("roles", List.class);
-        if(roles == null) return Collections.emptyList();
-        return roles.stream().map(r -> (GrantedAuthority) () -> r)
-                .collect(Collectors.toList());
-    }
-
 }
