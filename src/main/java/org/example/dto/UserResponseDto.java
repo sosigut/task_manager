@@ -18,7 +18,7 @@ import java.time.LocalDateTime;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class UserResponseDto {
 
-    private String id;
+    private Long id;
 
     private String email;
 

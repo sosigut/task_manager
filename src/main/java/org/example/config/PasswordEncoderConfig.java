@@ -12,4 +12,8 @@ public class PasswordEncoderConfig {
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
+
+    public String hashPassword(String password) {
+        return passwordEncoder().encode(password);
+    }
 }
