@@ -3,8 +3,10 @@ package org.example.mapper;
 import org.example.dto.RegisterRequestDto;
 import org.example.dto.UserResponseDto;
 import org.example.entity.UserEntity;
+import org.springframework.stereotype.Component;
 
-public class UserMapper {
+@Component
+public class Mapper {
 
     public UserEntity toEntity(RegisterRequestDto dto) {
         if (dto == null) {

@@ -10,10 +10,10 @@
     <artifactId>demo</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>demo</name>
-    <description>Spring Boot 3.2 + Java 21</description>
+    <description>Spring Boot 3.2 + Java 17</description>
 
     <properties>
-        <java.version>21</java.version>
+        <java.version>17</java.version>
         <spring-boot.version>3.2.5</spring-boot.version>
     </properties>
 
@@ -73,7 +73,8 @@
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
-            <optional>true</optional>
+            <version>1.18.30</version>
+            <scope>provided</scope>
         </dependency>
 
         <!-- Validation (часто нужна вместе с JPA) -->
@@ -119,6 +120,13 @@
                 <configuration>
                     <source>${java.version}</source>
                     <target>${java.version}</target>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>1.18.30</version>
+                        </path>
+                    </annotationProcessorPaths>
                 </configuration>
             </plugin>
 
