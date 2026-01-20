@@ -1,5 +1,18 @@
+server:
+  port: 8081
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/task_manager
+    username: postgres
+    password: do6rblubatman
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
 security:
   jwt:
-    secret: "2ffasvaVBSDSCLAeac4535tb"
+    secret: "2ffasvaVBSDSCLAeac453fdbHNGs324t6j5m5ERVyun9765453grnrthge3wefWEg42qwfEG54hsh4ehaa4hnxfngnxTRJZe4gawag43h5ahhhj5$J32gba5j65m5SNAE3fWEobdfhidbzmfwpoe"
     access-token-expiration: 15m
     refresh-token-expiration: 7d

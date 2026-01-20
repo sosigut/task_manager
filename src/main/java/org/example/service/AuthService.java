@@ -9,7 +9,7 @@ import org.example.dto.RegisterRequestDto;
 import org.example.dto.UserResponseDto;
 import org.example.entity.Role;
 import org.example.entity.UserEntity;
-import org.example.mapper.UserMapper;
+import org.example.mapper.Mapper;
 import org.example.repository.UserRepository;
 import org.springframework.stereotype.Service;
 
@@ -22,7 +22,7 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final PasswordEncoderConfig passwordEncoderConfig;
-    private final UserMapper userMapper;
+    private final Mapper mapper;
     private final JwtService jwtService;
 
     public UserResponseDto register (RegisterRequestDto registerRequestDto) throws Exception{
@@ -45,7 +45,7 @@ public class AuthService {
 
         userRepository.save(userEntity);
 
-        return userMapper.toDto(userEntity);
+        return mapper.toDto(userEntity);
     }
 
     public LoginResponseDto login (LoginRequestDto loginRequestDto) throws Exception {
