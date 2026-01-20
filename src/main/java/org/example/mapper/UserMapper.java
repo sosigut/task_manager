@@ -6,7 +6,7 @@ import org.example.entity.UserEntity;
 import org.springframework.stereotype.Component;
 
 @Component
-public class Mapper {
+public class UserMapper {
 
     public UserEntity toEntity(RegisterRequestDto dto) {
         if (dto == null) {

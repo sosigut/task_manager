@@ -1,39 +1,43 @@
 package org.example.service;
 
-<<<<<<< HEAD
 import org.example.dto.UserResponseDto;
 import org.example.entity.UserEntity;
 import org.example.mapper.UserMapper;
+import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-=======
->>>>>>> e2145f13ef1988903ee28ad926c7b732d1421b1d
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
 
 @Service
 public class UserService {
-<<<<<<< HEAD
 
-    private final UserMapper userMapper;
+    private final UserMapper mapper;
 
-    public UserService(UserMapper userMapper) {
-        this.userMapper = userMapper;
+    public UserService(UserMapper mapper) {
+        this.mapper = mapper;
     }
 
-    public UserEntity getCurrentUser(){
+    public UserEntity getCurrentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if(authentication==null){
-            return null;
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new AuthenticationCredentialsNotFoundException("Пользователь не аутентифицирован");
         }
         Object principal = authentication.getPrincipal();
-        return  (UserEntity)principal;
+        if(principal instanceof String && principal.equals("anonymousUser")){
+            throw new AuthenticationCredentialsNotFoundException("Пользователь не аутентифицирован");
+        }
+        if (principal instanceof UserEntity) {
+            return (UserEntity) principal;
+        } else {
+            throw new BadCredentialsException("Неверный тип principal");
+        }
     }
+
 
     public UserResponseDto getMe() {
         UserEntity user = getCurrentUser();
-        return userMapper.toDto(user);
+        return mapper.toDto(user);
     }
-
-=======
->>>>>>> e2145f13ef1988903ee28ad926c7b732d1421b1d
 }

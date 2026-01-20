@@ -1,10 +1,6 @@
 package org.example.service;
 
 import lombok.AllArgsConstructor;
-<<<<<<< HEAD
-import lombok.RequiredArgsConstructor;
-=======
->>>>>>> e2145f13ef1988903ee28ad926c7b732d1421b1d
 import org.example.entity.UserEntity;
 import org.example.repository.UserRepository;
 import org.springframework.security.core.userdetails.UserDetails;
