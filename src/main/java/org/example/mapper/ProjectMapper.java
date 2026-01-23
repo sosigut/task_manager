@@ -6,7 +6,6 @@ import org.example.entity.ProjectEntity;
 import org.example.entity.UserEntity;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Component
@@ -23,7 +22,7 @@ public class ProjectMapper {
                 .name(dto.getName().trim())
                 .description(dto.getDescription().trim())
                 .owner(owner)
-                .createdAt(LocalDate.now())
+                .createdAt(LocalDateTime.now())
                 .build();
     }
 

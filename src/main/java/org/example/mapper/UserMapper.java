@@ -5,6 +5,8 @@ import org.example.dto.UserResponseDto;
 import org.example.entity.UserEntity;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
+
 @Component
 public class UserMapper {
 
@@ -32,7 +34,7 @@ public class UserMapper {
                 .firstname(user.getFirstName())
                 .lastname(user.getLastName())
                 .role(user.getRole() != null ? user.getRole().name() : null)
-                .createdAt(user.getCreatedAt())
+                .createdAt(LocalDateTime.now())
                 .build();
     }
 

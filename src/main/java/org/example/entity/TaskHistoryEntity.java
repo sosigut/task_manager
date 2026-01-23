@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import lombok.*;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "tasks_history")
@@ -35,5 +36,5 @@ public class TaskHistoryEntity {
     private UserEntity changedBy;
 
     @Column(nullable = false)
-    private LocalDate changedAt;
+    private LocalDateTime changedAt;
 }
