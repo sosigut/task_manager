@@ -12,11 +12,9 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class CreateProjectRequestDto {
 
-    @NotNull
     @NotBlank(message = "Название проекта обязательно")
     private String name;
 
-    @NotNull
     @NotBlank(message = "Описание проекта обязательно")
     @Size(max = 1000)
     private String description;

@@ -36,7 +36,7 @@ public class ProjectMapper {
                 .name(entity.getName())
                 .description(entity.getDescription())
                 .ownerId(entity.getOwner().getId())
-                .createdAt(LocalDateTime.now())
+                .createdAt(entity.getCreatedAt())
                 .build();
     }
 

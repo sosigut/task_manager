@@ -30,7 +30,7 @@ public class ProjectService {
 
     }
 
-    public List<ProjectResponseDto> getAllProjects() {
+    public List<ProjectResponseDto> getMyProjects() {
 
         UserEntity owner = userService.getCurrentUser();
         List<ProjectEntity> projects = projectRepository.findAllByOwnerId(owner.getId());
