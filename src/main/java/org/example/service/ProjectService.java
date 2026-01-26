@@ -4,7 +4,9 @@ import lombok.AllArgsConstructor;
 import org.example.dto.CreateProjectRequestDto;
 import org.example.dto.ProjectResponseDto;
 import org.example.entity.ProjectEntity;
+import org.example.entity.Role;
 import org.example.entity.UserEntity;
+import org.example.exception.ForbiddenException;
 import org.example.mapper.ProjectMapper;
 import org.example.repository.ProjectRepository;
 import org.springframework.stereotype.Service;
@@ -23,6 +25,11 @@ public class ProjectService {
     public ProjectResponseDto createProject(CreateProjectRequestDto dto) {
 
         UserEntity owner = userService.getCurrentUser();
+
+        if (owner.getRole().equals(Role.USER)){
+            throw new ForbiddenException("Вы не можете создавать проекты");
+        }
+
         ProjectEntity project = projectMapper.toEntity(dto, owner);
         ProjectEntity saved = projectRepository.save(project);
 

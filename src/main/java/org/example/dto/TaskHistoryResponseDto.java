@@ -1,19 +1,24 @@
 package org.example.dto;
 
-import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.example.entity.Status;
 
+import java.time.LocalDateTime;
+
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class UpdateTaskStatusRequestDto {
+public class TaskHistoryResponseDto {
 
-    @NotNull(message = "Статус обязателен")
+    private Status oldStatus;
+
     private Status newStatus;
 
+    private LocalDateTime changedAt;
+
+    private Long changedById;
 }
