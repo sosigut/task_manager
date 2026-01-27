@@ -26,7 +26,7 @@ public class ProjectService {
 
         UserEntity owner = userService.getCurrentUser();
 
-        if (owner.getRole().equals(Role.USER)){
+        if (owner.getRole() == Role.USER){
             throw new ForbiddenException("Вы не можете создавать проекты");
         }
 

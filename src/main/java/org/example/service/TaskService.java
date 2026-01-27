@@ -52,7 +52,7 @@ public class TaskService {
         UserEntity assignee = userRepository.findById(dto.getAssigneeId())
                 .orElseThrow(() -> new NotFoundException("Assignee not found"));
 
-        if(currentUser.getRole().equals(Role.USER)) {
+        if(currentUser.getRole() == Role.USER) {
             throw new ForbiddenException(String.format("Пользователь с ролью %s не может создавать задачу", Role.USER));
         }
 
@@ -73,16 +73,16 @@ public class TaskService {
 
         Status oldStatus = task.getStatus();
 
-        if(currentUser.getRole().equals(Role.USER) &&
+        if(currentUser.getRole() == Role.USER &&
         !currentUser.getId().equals(task.getAssignee().getId())) {
             throw new ForbiddenException("Только исполнитель задачи может изменить ее статус");
         }
 
-        if(currentUser.getRole().equals(Role.USER) && newStatus == Status.DONE){
+        if(currentUser.getRole() == Role.USER && newStatus == Status.DONE){
             throw new ForbiddenException("Недостаточно прав доступа");
         }
 
-        if(currentUser.getRole().equals(Role.USER)){
+        if(currentUser.getRole() == Role.USER){
             Set<Status> allowedNewStatuses = ALLOWED_TRANSITIONS.get(oldStatus);
 
             if(allowedNewStatuses == null || !allowedNewStatuses.contains(newStatus)){
@@ -110,13 +110,22 @@ public class TaskService {
 
     public List<TaskResponseDto> getTasksByProject(Long projectId) {
 
+        UserEntity currentUser = userService.getCurrentUser();
+
         ProjectEntity project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new NotFoundException("Project not found"));
 
-        List<TaskEntity> tasks = taskRepository.findAllByProjectId(project.getId());
+        List<TaskEntity> tasks;
+        if(currentUser.getRole() == Role.MANAGER || currentUser.getRole() == Role.ADMIN){
 
+            tasks = taskRepository.findAllByProjectId(project.getId());
+        }
+        else{
+
+            tasks = taskRepository.findAllByProjectIdAndAssigneeId(project.getId(), currentUser.getId());
+
+        }
         return tasks.stream().map(taskMapper::toDto).collect(Collectors.toList());
-
     }
 
     public List<TaskHistoryResponseDto> getTaskHistory(Long taskId) {
