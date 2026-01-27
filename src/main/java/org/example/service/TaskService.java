@@ -139,7 +139,4 @@ public class TaskService {
         return history.stream().map(taskHistoryMapper::toDto).collect(Collectors.toList());
 
     }
-
-
-
 }

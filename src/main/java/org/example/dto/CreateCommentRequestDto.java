@@ -12,6 +12,6 @@ import lombok.NoArgsConstructor;
 public class CreateCommentRequestDto {
 
     @NotBlank(message = "Введите свой комментарий: ")
-    private String comment;
+    private String text;
 
 }
