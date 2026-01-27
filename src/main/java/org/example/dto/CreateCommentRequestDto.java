@@ -11,7 +11,8 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class CreateCommentRequestDto {
 
-    @NotBlank(message = "Введите свой комментарий: ")
+    @NotBlank(message = "Комментарий не должен быть пустым")
+    @Size(max = 2000)
     private String text;
 
 }

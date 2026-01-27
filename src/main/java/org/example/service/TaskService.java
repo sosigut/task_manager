@@ -9,7 +9,6 @@ import org.example.exception.ForbiddenException;
 import org.example.exception.NotFoundException;
 import org.example.mapper.TaskHistoryMapper;
 import org.example.mapper.TaskMapper;
-import org.example.mapper.UserMapper;
 import org.example.repository.ProjectRepository;
 import org.example.repository.TaskHistoryRepository;
 import org.example.repository.TaskRepository;
@@ -17,7 +16,6 @@ import org.example.repository.UserRepository;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
