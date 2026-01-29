@@ -33,22 +33,24 @@ public class CommentService {
         TaskEntity task = taskRepository.findById(taskId)
                 .orElseThrow(()-> new NotFoundException("Task not found"));
 
-        CommentEntity comment;
+        cheackCommentPermission(currentUser, task);
+
+        CommentEntity comment = commentMapper.toEntity(dto, task, currentUser);
+        CommentEntity saved =  commentRepository.save(comment);
+        return commentMapper.toDto(saved);
+
+    }
+
+    private void cheackCommentPermission(UserEntity currentUser, TaskEntity task){
 
         if(currentUser.getRole() == Role.ADMIN || currentUser.getRole() == Role.MANAGER){
-
-            comment = commentMapper.toEntity(dto, task, currentUser);
-            CommentEntity saved =  commentRepository.save(comment);
-            return commentMapper.toDto(saved);
-
-        }else if(currentUser.getRole() == Role.USER
-                && task.getAssignee().getId().equals(currentUser.getId())){
-
-            comment = commentMapper.toEntity(dto, task, currentUser);
-            CommentEntity saved =  commentRepository.save(comment);
-            return commentMapper.toDto(saved);
-
-        } throw new ForbiddenException("Недостаточно прав доступа");
+            return;
+        } else if(currentUser.getRole() == Role.USER){
+            boolean isAssignee = task.getAssignee().getId().equals(currentUser.getId());
+            if(isAssignee){
+                return;
+            }
+        } throw new ForbiddenException("Недостаточно прав");
 
     }
 
@@ -58,16 +60,10 @@ public class CommentService {
         TaskEntity task = taskRepository.findById(taskId)
                 .orElseThrow(()-> new NotFoundException("Task not found"));
 
-        if(currentUser.getRole() == Role.ADMIN || currentUser.getRole() == Role.MANAGER){
-            List<CommentEntity> comments = commentRepository
-                    .findAllByTaskIdOrderByCreatedAtAsc(taskId);
-            return comments.stream().map(commentMapper::toDto).collect(Collectors.toList());
-        } else if(currentUser.getRole() == Role.USER
-                && task.getAssignee().getId().equals(currentUser.getId())){
-            List<CommentEntity> comments = commentRepository
-                    .findAllByTaskIdOrderByCreatedAtAsc(taskId);
-            return comments.stream().map(commentMapper::toDto).collect(Collectors.toList());
-        } throw new ForbiddenException("Нет прав доступа на просмотр комментариев");
+        cheackCommentPermission(currentUser, task);
+
+        List<CommentEntity> comments = commentRepository.findAllByTaskIdOrderByCreatedAtAsc(taskId);
+        return  comments.stream().map(commentMapper::toDto).collect(Collectors.toList());
 
     }
 
