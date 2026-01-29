@@ -18,7 +18,7 @@ public class CommentController {
 
     @PostMapping("/{taskId}/comments")
     public CommentResponseDto createComment(
-            @Valid @RequestParam CreateCommentRequestDto dto,
+            @Valid @RequestBody CreateCommentRequestDto dto,
             @PathVariable Long taskId) {
         return commentService.createComment(taskId, dto);
     }
