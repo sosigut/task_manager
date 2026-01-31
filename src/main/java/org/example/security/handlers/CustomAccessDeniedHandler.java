@@ -33,7 +33,7 @@ public class CustomAccessDeniedHandler implements AccessDeniedHandler {
                 .timestamp(LocalDateTime.now())
                 .status(403)
                 .error("Forbidden")
-                .message("Access Denied" + ex)
+                .message("Access Denied : " + ex.getMessage())
                 .path(request.getRequestURI())
                 .build();
 

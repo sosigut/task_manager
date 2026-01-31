@@ -27,13 +27,13 @@ public class JwtAuthEntryPoint implements AuthenticationEntryPoint {
             AuthenticationException ex) throws IOException, ServletException {
 
         response.setStatus(401);
-        response.setContentType("application/json");
+        response.setContentType("application/json;charset=UTF-8");
 
         ErrorResponseDto error = ErrorResponseDto.builder()
                 .timestamp(LocalDateTime.now())
                 .status(401)
                 .error("Unauthorized")
-                .message("Authorization please : " + ex)
+                .message("Invalid or missing token : " + ex.getMessage())
                 .path(request.getRequestURI())
                 .build();
 

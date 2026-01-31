@@ -33,12 +33,12 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http, AuthenticationEntryPoint authenticationEntryPoint) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
 
                 .exceptionHandling(excaptionHandling -> excaptionHandling
-                        .authenticationEntryPoint(authenticationEntryPoint)
+                        .authenticationEntryPoint(jwtAuthEntryPoint)
                         .accessDeniedHandler(customAccessDeniedHandler))
 
 
