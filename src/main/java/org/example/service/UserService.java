@@ -3,6 +3,7 @@ package org.example.service;
 import org.example.dto.UserResponseDto;
 import org.example.entity.UserEntity;
 import org.example.mapper.UserMapper;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.Authentication;
@@ -34,7 +35,7 @@ public class UserService {
         }
     }
 
-
+    @PreAuthorize("isAuthenticated()")
     public UserResponseDto getMe() {
         UserEntity user = getCurrentUser();
         return mapper.toDto(user);

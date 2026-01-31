@@ -12,6 +12,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.security.access.AccessDeniedException;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -30,7 +31,7 @@ public class GlobalExceptionHandler {
                 .timestamp(LocalDateTime.now())
                 .status(HttpStatus.FORBIDDEN.value())
                 .error("Forbidden")
-                .message(ex.getMessage())
+                .message("Access Denied" + " : " + ex.getMessage())
                 .path(request.getRequestURI())
                 .build();
 
@@ -48,7 +49,7 @@ public class GlobalExceptionHandler {
                 .timestamp(LocalDateTime.now())
                 .status(HttpStatus.NOT_FOUND.value())
                 .error("Not Found")
-                .message(ex.getMessage())
+                .message("Not found" + " : " + ex.getMessage())
                 .path(request.getRequestURI())
                 .build();
 
@@ -71,7 +72,7 @@ public class GlobalExceptionHandler {
                 .timestamp(LocalDateTime.now())
                 .status(HttpStatus.BAD_REQUEST.value())
                 .error("Bad Request")
-                .message("Validation failed")
+                .message("Validation failed" + " : " + ex.getMessage())
                 .path(request.getRequestURI())
                 .validationErrors(errors)
                 .build();
@@ -123,13 +124,31 @@ public class GlobalExceptionHandler {
                 .timestamp(LocalDateTime.now())
                 .status(HttpStatus.BAD_REQUEST.value())
                 .error("Bad Request")
-                .message(message)
+                .message(message + " : " + ex.getMessage())
                 .path(request.getRequestURI())
                 .build();
 
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
 
     }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ErrorResponseDto> handleAccessDeniedException(
+            AccessDeniedException ex, HttpServletRequest request){
+
+        String message = "Доступ запрещен, недостаточно прав";
+
+        ErrorResponseDto error = ErrorResponseDto.builder()
+                .timestamp(LocalDateTime.now())
+                .status(HttpStatus.FORBIDDEN.value())
+                .error("Access Denied Error")
+                .message(message + " : " + ex.getMessage())
+                .path(request.getRequestURI())
+                .build();
+
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
+    }
+
 
     // 500
     @ExceptionHandler(Exception.class)
@@ -142,7 +161,7 @@ public class GlobalExceptionHandler {
                 .timestamp(LocalDateTime.now())
                 .status(HttpStatus.INTERNAL_SERVER_ERROR.value())
                 .error("Internal Server Error")
-                .message(message)
+                .message(message + " : " + ex.getMessage() + " : " + ex.getClass().getName())
                 .path(request.getRequestURI())
                 .build();
 

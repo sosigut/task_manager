@@ -9,6 +9,7 @@ import org.example.entity.UserEntity;
 import org.example.exception.ForbiddenException;
 import org.example.mapper.ProjectMapper;
 import org.example.repository.ProjectRepository;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -22,14 +23,10 @@ public class ProjectService {
     private final UserService userService;
     private final ProjectRepository projectRepository;
 
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public ProjectResponseDto createProject(CreateProjectRequestDto dto) {
 
         UserEntity owner = userService.getCurrentUser();
-
-        if (owner.getRole() == Role.USER){
-            throw new ForbiddenException("Вы не можете создавать проекты");
-        }
-
         ProjectEntity project = projectMapper.toEntity(dto, owner);
         ProjectEntity saved = projectRepository.save(project);
 
@@ -37,6 +34,7 @@ public class ProjectService {
 
     }
 
+    @PreAuthorize("isAuthenticated()")
     public List<ProjectResponseDto> getMyProjects() {
 
         UserEntity owner = userService.getCurrentUser();

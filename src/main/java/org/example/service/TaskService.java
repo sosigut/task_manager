@@ -13,6 +13,7 @@ import org.example.repository.ProjectRepository;
 import org.example.repository.TaskHistoryRepository;
 import org.example.repository.TaskRepository;
 import org.example.repository.UserRepository;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -39,20 +40,14 @@ public class TaskService {
             Status.REVISION, Set.of(Status.IN_PROGRESS)
     );
 
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public TaskResponseDto createTask(Long projectId, CreateTaskRequestDto dto){
-
-        //Будет нужен для проверки прав
-        UserEntity currentUser = userService.getCurrentUser();
 
         ProjectEntity project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new NotFoundException("Project not found"));
 
         UserEntity assignee = userRepository.findById(dto.getAssigneeId())
                 .orElseThrow(() -> new NotFoundException("Assignee not found"));
-
-        if(currentUser.getRole() == Role.USER) {
-            throw new ForbiddenException(String.format("Пользователь с ролью %s не может создавать задачу", Role.USER));
-        }
 
         TaskEntity task = taskMapper.toEntity(dto, project, assignee);
 
@@ -62,6 +57,7 @@ public class TaskService {
 
     }
 
+    @PreAuthorize("isAuthenticated()")
     public TaskResponseDto changeStatus(Long id, Status newStatus){
 
         UserEntity currentUser = userService.getCurrentUser();
@@ -72,7 +68,7 @@ public class TaskService {
         Status oldStatus = task.getStatus();
 
         if(currentUser.getRole() == Role.USER &&
-        !currentUser.getId().equals(task.getAssignee().getId())) {
+                !currentUser.getId().equals(task.getAssignee().getId())) {
             throw new ForbiddenException("Только исполнитель задачи может изменить ее статус");
         }
 
@@ -106,6 +102,7 @@ public class TaskService {
 
     }
 
+    @PreAuthorize("isAuthenticated()")
     public List<TaskResponseDto> getTasksByProject(Long projectId) {
 
         UserEntity currentUser = userService.getCurrentUser();
@@ -126,10 +123,18 @@ public class TaskService {
         return tasks.stream().map(taskMapper::toDto).collect(Collectors.toList());
     }
 
+    @PreAuthorize("isAuthenticated()")
     public List<TaskHistoryResponseDto> getTaskHistory(Long taskId) {
+
+        UserEntity currentUser = userService.getCurrentUser();
 
         TaskEntity task =  taskRepository.findById(taskId)
                 .orElseThrow(() -> new NotFoundException("Task not found"));
+
+        if(currentUser.getRole() == Role.USER
+                && !currentUser.getId().equals(task.getAssignee().getId())) {
+            throw new ForbiddenException("Недостаточно прав доступа");
+        }
 
         List<TaskHistoryEntity> history = taskHistoryRepository
                 .findAllByTaskIdOrderByChangedAtAsc(task.getId());
