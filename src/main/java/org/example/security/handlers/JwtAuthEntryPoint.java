@@ -33,7 +33,7 @@ public class JwtAuthEntryPoint implements AuthenticationEntryPoint {
                 .timestamp(LocalDateTime.now())
                 .status(401)
                 .error("Unauthorized")
-                .message("Authorization please" + ex)
+                .message("Authorization please : " + ex)
                 .path(request.getRequestURI())
                 .build();
 
