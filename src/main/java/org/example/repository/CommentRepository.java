@@ -1,11 +1,39 @@
 package org.example.repository;
 
 import org.example.entity.CommentEntity;
+import org.springframework.data.domain.Slice;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.data.domain.Pageable;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
 public interface CommentRepository extends JpaRepository<CommentEntity,Long> {
-    public List<CommentEntity> findAllByTaskIdOrderByCreatedAtAsc(Long taskId);
+
+    @Query("""
+        select comment from CommentEntity comment
+        where comment.task.id = :taskId
+        order by comment.createdAt desc, comment.id desc
+    """)
+    public Slice<CommentEntity> findFirstPageByTaskIdOrderByCreatedAtAndIdDesc(@Param("taskId") Long taskId,
+                                                                         Pageable pageable);
+
+    @Query("""
+        select comment from CommentEntity comment
+        where comment.task.id = :taskId
+          and (
+              comment.createdAt < :cursorCreatedAt
+              or (comment.createdAt = :cursorCreatedAt and comment.id < :cursorId)
+          )
+        order by comment.createdAt desc, comment.id desc
+    """)
+    public Slice<CommentEntity> findNextPageByTaskIdOrderByCreatedAtAndIdDescAfterCursor(
+            @Param("taskId") Long taskId,
+            @Param("cursorCreatedAt")LocalDateTime cursorCreatedAt,
+            @Param("cursorId") Long cursorId,
+            Pageable pageable
+    );
+
 }
