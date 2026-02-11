@@ -17,7 +17,7 @@ public interface ProjectRepository extends JpaRepository<ProjectEntity, Long> {
         where project.owner.id = :ownerId
         order by project.createdAt desc, project.id desc
     """)
-    public Slice<ProjectEntity> findFirstPageByCreatedAtAndOIdDesc(@Param("ownerId") Long ownerId,
+    public Slice<ProjectEntity> findFirstPageByCreatedAtAndOwnerIdDesc(@Param("ownerId") Long ownerId,
                                                                        Pageable pageable);
 
     @Query("""
@@ -29,7 +29,7 @@ public interface ProjectRepository extends JpaRepository<ProjectEntity, Long> {
           )
         order by project.createdAt desc, project.id desc
     """)
-    public Slice<ProjectEntity> findNextPageByCreatedAtAndIdAfterCursor(@Param("ownerId") Long ownerId,
+    public Slice<ProjectEntity> findNextPageByCreatedAtAndOwnerIdAfterCursor(@Param("ownerId") Long ownerId,
                                                                              @Param("cursorCreatedAt") LocalDateTime cursorCreatedAt,
                                                                              @Param("cursorId") Long cursorId,
                                                                              Pageable pageable);

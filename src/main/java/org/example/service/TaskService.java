@@ -2,7 +2,6 @@ package org.example.service;
 
 import lombok.AllArgsConstructor;
 import org.example.dto.CreateTaskRequestDto;
-import org.example.dto.KeysetTaskPageResponseDto;
 import org.example.dto.TaskHistoryResponseDto;
 import org.example.dto.TaskResponseDto;
 import org.example.entity.*;
@@ -10,14 +9,13 @@ import org.example.exception.ForbiddenException;
 import org.example.exception.NotFoundException;
 import org.example.mapper.TaskHistoryMapper;
 import org.example.mapper.TaskMapper;
+import org.example.pagination.*;
 import org.example.repository.ProjectRepository;
 import org.example.repository.TaskHistoryRepository;
 import org.example.repository.TaskRepository;
 import org.example.repository.UserRepository;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
-import org.springframework.data.domain.Sort;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 
@@ -38,6 +36,9 @@ public class TaskService {
     private final TaskMapper taskMapper;
     private final TaskHistoryMapper taskHistoryMapper;
     private final TaskHistoryRepository taskHistoryRepository;
+    private final KeysetPaginationUtils keysetPaginationUtils;
+    private final KeysetPageBuilder pageBuilder;
+    private final KeysetPaginationFetcher keysetPaginationFetcher;
 
     private static final Map<Status, Set<Status>> ALLOWED_TRANSITIONS =Map.of(
             Status.TODO, Set.of(Status.IN_PROGRESS),
@@ -107,84 +108,60 @@ public class TaskService {
 
     }
 
-    private void validateKeysetCursor(boolean isFirst, boolean isNext) {
-        if (isFirst || isNext) return;
-        throw new IllegalArgumentException("Неверные параметры курсора");
-    }
-
     @PreAuthorize("isAuthenticated()")
-    public KeysetTaskPageResponseDto getKeySetTasksByProject(
+    public KeysetPageResponseDto<TaskResponseDto> getKeySetTasksByProject(
             Long projectId,
             Integer limit,
             LocalDateTime cursorCreatedAt,
             Long cursorId
-    ) {
+    ) throws NotFoundException {
 
-        int pageSize = limit != null && limit > 0 ? Math.min(limit, 50) : 10;
-        int querySize = pageSize + 1;
-
-        boolean isFirst = cursorCreatedAt == null && cursorId == null;
-        boolean isNext  = cursorCreatedAt != null && cursorId != null;
-
-        validateKeysetCursor(isFirst, isNext);
-
-        Pageable pageable = PageRequest.of(
-                0,
-                querySize,
-                Sort.by(
-                        Sort.Order.desc("createdAt"),
-                        Sort.Order.desc("id")
-                )
-        );
+        PaginationMode mode = keysetPaginationUtils.cursorMode(cursorCreatedAt, cursorId);
+        int pageSize = keysetPaginationUtils.normalizeLimit(limit);
+        Pageable pageable = keysetPaginationUtils.createPageable(pageSize);
 
         UserEntity currentUser = userService.getCurrentUser();
 
         ProjectEntity project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new NotFoundException("Project not found"));
 
-        Slice<TaskEntity> slice;
+        boolean isAdminOrManager = currentUser.getRole() == Role.ADMIN ||
+                currentUser.getRole() == Role.MANAGER;
 
-        if (currentUser.getRole() == Role.ADMIN || currentUser.getRole() == Role.MANAGER) {
+        Slice<TaskEntity> slice = keysetPaginationFetcher.fetchSlice(
+                mode,
+                () -> {
+                    if(isAdminOrManager){
+                        return taskRepository.findFirstPageByProjectId(project.getId(), pageable);
+                    } else {
+                        return taskRepository.findFirstPageByProjectIdAndAssigneeId(project.getId(),
+                                currentUser.getId(), pageable);
+                    }
+                },
+                (createdAt, id) -> {
+                    if(isAdminOrManager){
+                        return taskRepository.findNextByProjectIdAfterCursor(project.getId(), createdAt,
+                                id, pageable);
+                    } else {
+                        return taskRepository.findNextByProjectIdAndAssigneeIdAfterCursor(project.getId(),
+                                currentUser.getId(), createdAt, id, pageable);
+                    }
+                },
+                cursorCreatedAt,
+                cursorId
+        );
 
-            slice = isFirst
-                    ? taskRepository.findFirstPageByProjectId(project.getId(), pageable)
-                    : taskRepository.findNextByProjectIdAfterCursor(
-                    project.getId(), cursorCreatedAt, cursorId, pageable
-            );
+        KeysetSliceResult<TaskEntity> sliceResult =
+                keysetPaginationUtils.trim(
+                        slice,
+                        pageSize
+                );
 
-        } else {
-
-            slice = isFirst
-                    ? taskRepository.findFirstPageByProjectIdAndAssigneeId(
-                    project.getId(), currentUser.getId(), pageable
-            )
-                    : taskRepository.findNextByProjectIdAndAssigneeIdAfterCursor(
-                    project.getId(), currentUser.getId(),
-                    cursorCreatedAt, cursorId, pageable
-            );
-        }
-
-        var content = slice.getContent();
-
-        boolean hasNext = content.size() > pageSize;
-        var itemsToReturn = hasNext ? content.subList(0, pageSize) : content;
-
-        LocalDateTime nextCursorCreatedAt = null;
-        Long nextCursorId = null;
-
-        if (hasNext && !itemsToReturn.isEmpty()) {
-            TaskEntity last = itemsToReturn.get(itemsToReturn.size() - 1);
-            nextCursorCreatedAt = last.getCreatedAt();
-            nextCursorId = last.getId();
-        }
-
-        return KeysetTaskPageResponseDto.builder()
-                .items(itemsToReturn.stream().map(taskMapper::toDto).toList())
-                .limit(pageSize)
-                .cursorCreatedAt(nextCursorCreatedAt)
-                .cursorId(nextCursorId)
-                .hasNext(hasNext)
-                .build();
+        return pageBuilder.universalBuilder(
+                sliceResult,
+                taskMapper::toDto,
+                pageSize
+        );
     }
 
     @PreAuthorize("isAuthenticated()")
