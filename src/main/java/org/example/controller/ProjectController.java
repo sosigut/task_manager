@@ -4,9 +4,12 @@ import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
 import org.example.dto.CreateProjectRequestDto;
 import org.example.dto.ProjectResponseDto;
+import org.example.pagination.KeysetPageResponseDto;
 import org.example.service.ProjectService;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @RestController
@@ -21,8 +24,11 @@ public class ProjectController {
         return projectService.createProject(dto);
     }
 
-    @GetMapping("/my")
-    public List<ProjectResponseDto> getProjects() {
-        return projectService.getMyProjects();
+    @GetMapping("/my?limit=10&cursorCreatedAt=...&cursorId=...")
+    public KeysetPageResponseDto<ProjectResponseDto> getProjects(
+            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime cursorCreatedAt,
+            @RequestParam(required = false) Long cursorId) {
+        return projectService.getMyProjects(limit, cursorCreatedAt, cursorId);
     }
 }

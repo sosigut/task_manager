@@ -5,9 +5,12 @@ import lombok.AllArgsConstructor;
 import org.example.dto.CreateTaskRequestDto;
 import org.example.dto.TaskResponseDto;
 import org.example.dto.UpdateTaskStatusRequestDto;
+import org.example.pagination.KeysetPageResponseDto;
 import org.example.service.TaskService;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @RestController
@@ -25,9 +28,13 @@ public class ProjectTaskController {
     }
 
 
-    @GetMapping("/{projectId}/tasks")
-    public List<TaskResponseDto> getProjectTasks(@PathVariable Long projectId){
-        return taskService.getTasksByProject(projectId);
+    @GetMapping("/{projectId}/tasks?limit=10&cursorCreatedAt=...&cursorId=...")
+    public KeysetPageResponseDto<TaskResponseDto> getProjectTasks(
+            @PathVariable Long projectId,
+            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime cursorCreatedAt,
+            @RequestParam(required = false) Long cursorId){
+        return taskService.getKeysetTasksByProject(projectId, limit, cursorCreatedAt, cursorId);
     }
 
 

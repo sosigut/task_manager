@@ -7,7 +7,6 @@ import java.util.List;
 import java.util.function.Function;
 
 @Component
-@AllArgsConstructor
 public class KeysetPageBuilder {
 
     public <E extends KeysetEntity, D> KeysetPageResponseDto<D> universalBuilder(

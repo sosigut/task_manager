@@ -23,6 +23,6 @@ public class KeysetPageResponseDto<T> {
 
     private boolean hasNext;
 
-    private String sort = "createdAt:desc,id:desc";
+    private final String sort = "createdAt:desc,id:desc";
 
 }

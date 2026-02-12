@@ -4,9 +4,12 @@ import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
 import org.example.dto.CommentResponseDto;
 import org.example.dto.CreateCommentRequestDto;
+import org.example.pagination.KeysetPageResponseDto;
 import org.example.service.CommentService;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @RestController
@@ -23,8 +26,12 @@ public class CommentController {
         return commentService.createComment(taskId, dto);
     }
 
-    @GetMapping("/{taskId}/comments")
-    public List<CommentResponseDto> getComments(@PathVariable Long taskId) {
-        return commentService.getComments(taskId);
+    @GetMapping("/{taskId}/comments?limit=10&cursorCreatedAt=...&cursorId=...")
+    public KeysetPageResponseDto<CommentResponseDto> getComments(
+            @PathVariable Long taskId,
+            @RequestParam(required=false) Integer limit,
+            @RequestParam(required=false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime cursorCreatedAt,
+            @RequestParam(required=false) Long cursorId) {
+        return commentService.getKeysetTaskComments(taskId, limit, cursorCreatedAt, cursorId);
     }
 }

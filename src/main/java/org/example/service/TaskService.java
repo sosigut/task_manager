@@ -111,7 +111,7 @@ public class TaskService {
     }
 
     @PreAuthorize("isAuthenticated()")
-    public KeysetPageResponseDto<TaskResponseDto> getKeySetTasksByProject(
+    public KeysetPageResponseDto<TaskResponseDto> getKeysetTasksByProject(
             Long projectId,
             Integer limit,
             LocalDateTime cursorCreatedAt,

@@ -15,27 +15,12 @@ public class KeysetPaginationFetcher {
             Supplier<Slice<E>> firstPageSupplier,
             BiFunction<LocalDateTime, Long, Slice<E>> nextPageSupplier,
             LocalDateTime cursorCreatedAt,
-            Long cursorId) throws IllegalArgumentException {
-
-        if (mode == PaginationMode.NEXT) {
-            if (cursorCreatedAt == null || cursorId == null) {
-                throw new IllegalArgumentException(
-                        "Для следующей страницы необходимо указать cursorCreatedAt и cursorId"
-                );
-            }
-            return nextPageSupplier.apply(cursorCreatedAt, cursorId);
-        }
+            Long cursorId) {
 
         if (mode == PaginationMode.FIRST) {
-            if (cursorCreatedAt != null || cursorId != null) {
-                throw new IllegalArgumentException(
-                        "Для первой страницы не должны передаваться cursorCreatedAt и cursorId"
-                );
-            }
             return firstPageSupplier.get();
         }
-
-        throw new IllegalArgumentException("Неизвестный режим пагинации: " + mode);
+        return nextPageSupplier.apply(cursorCreatedAt, cursorId);
 
     }
 
