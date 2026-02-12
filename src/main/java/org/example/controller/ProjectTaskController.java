@@ -28,7 +28,7 @@ public class ProjectTaskController {
     }
 
 
-    @GetMapping("/{projectId}/tasks?limit=10&cursorCreatedAt=...&cursorId=...")
+    @GetMapping("/{projectId}/tasks")
     public KeysetPageResponseDto<TaskResponseDto> getProjectTasks(
             @PathVariable Long projectId,
             @RequestParam(required = false) Integer limit,

@@ -24,7 +24,7 @@ public class ProjectController {
         return projectService.createProject(dto);
     }
 
-    @GetMapping("/my?limit=10&cursorCreatedAt=...&cursorId=...")
+    @GetMapping("/my")
     public KeysetPageResponseDto<ProjectResponseDto> getProjects(
             @RequestParam(required = false) Integer limit,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime cursorCreatedAt,

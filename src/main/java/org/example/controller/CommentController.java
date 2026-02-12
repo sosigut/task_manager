@@ -26,7 +26,7 @@ public class CommentController {
         return commentService.createComment(taskId, dto);
     }
 
-    @GetMapping("/{taskId}/comments?limit=10&cursorCreatedAt=...&cursorId=...")
+    @GetMapping("/{taskId}/comments")
     public KeysetPageResponseDto<CommentResponseDto> getComments(
             @PathVariable Long taskId,
             @RequestParam(required=false) Integer limit,
