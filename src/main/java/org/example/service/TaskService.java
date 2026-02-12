@@ -23,6 +23,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BiFunction;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 @Service
@@ -120,6 +122,9 @@ public class TaskService {
         int pageSize = keysetPaginationUtils.normalizeLimit(limit);
         Pageable pageable = keysetPaginationUtils.createPageable(pageSize);
 
+        Supplier<Slice<TaskEntity>> firstPageSupplier;
+        BiFunction<LocalDateTime, Long, Slice<TaskEntity>> nextPageSupplier;
+
         UserEntity currentUser = userService.getCurrentUser();
 
         ProjectEntity project = projectRepository.findById(projectId)
@@ -128,25 +133,22 @@ public class TaskService {
         boolean isAdminOrManager = currentUser.getRole() == Role.ADMIN ||
                 currentUser.getRole() == Role.MANAGER;
 
+        if (isAdminOrManager) {
+            firstPageSupplier = () -> taskRepository.findFirstPageByProjectId(project.getId(), pageable);
+            nextPageSupplier = (createdAt, id) ->
+                    taskRepository.findNextByProjectIdAfterCursor(project.getId(), createdAt, id, pageable);
+        } else {
+            firstPageSupplier = () -> taskRepository.findFirstPageByProjectIdAndAssigneeId(
+                    project.getId(), currentUser.getId(), pageable);
+            nextPageSupplier = (createdAt, id) ->
+                    taskRepository.findNextByProjectIdAndAssigneeIdAfterCursor(
+                            project.getId(), currentUser.getId(), createdAt, id, pageable);
+        }
+
         Slice<TaskEntity> slice = keysetPaginationFetcher.fetchSlice(
                 mode,
-                () -> {
-                    if(isAdminOrManager){
-                        return taskRepository.findFirstPageByProjectId(project.getId(), pageable);
-                    } else {
-                        return taskRepository.findFirstPageByProjectIdAndAssigneeId(project.getId(),
-                                currentUser.getId(), pageable);
-                    }
-                },
-                (createdAt, id) -> {
-                    if(isAdminOrManager){
-                        return taskRepository.findNextByProjectIdAfterCursor(project.getId(), createdAt,
-                                id, pageable);
-                    } else {
-                        return taskRepository.findNextByProjectIdAndAssigneeIdAfterCursor(project.getId(),
-                                currentUser.getId(), createdAt, id, pageable);
-                    }
-                },
+                firstPageSupplier,
+                nextPageSupplier,
                 cursorCreatedAt,
                 cursorId
         );
