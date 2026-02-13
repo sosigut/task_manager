@@ -14,6 +14,7 @@ import org.example.repository.ProjectRepository;
 import org.example.repository.TaskHistoryRepository;
 import org.example.repository.TaskRepository;
 import org.example.repository.UserRepository;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -110,6 +111,7 @@ public class TaskService {
 
     }
 
+    @Cacheable(value = "taskPages")
     @PreAuthorize("isAuthenticated()")
     public KeysetPageResponseDto<TaskResponseDto> getKeysetTasksByProject(
             Long projectId,

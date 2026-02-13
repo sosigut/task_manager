@@ -8,6 +8,7 @@ import org.example.entity.UserEntity;
 import org.example.mapper.ProjectMapper;
 import org.example.pagination.*;
 import org.example.repository.ProjectRepository;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -37,8 +38,9 @@ public class ProjectService {
 
     }
 
+    @Cacheable(value = "projectPage")
     @PreAuthorize("isAuthenticated()")
-    public KeysetPageResponseDto<ProjectResponseDto> getMyProjects(Integer limit,
+    public KeysetPageResponseDto<ProjectResponseDto> getKeysetMyProjects(Integer limit,
                                                LocalDateTime cursorCreatedAt,
                                                Long cursorId) {
 

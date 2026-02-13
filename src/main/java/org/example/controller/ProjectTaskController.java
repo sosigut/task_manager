@@ -4,14 +4,12 @@ import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
 import org.example.dto.CreateTaskRequestDto;
 import org.example.dto.TaskResponseDto;
-import org.example.dto.UpdateTaskStatusRequestDto;
 import org.example.pagination.KeysetPageResponseDto;
 import org.example.service.TaskService;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
 @RestController
 @AllArgsConstructor

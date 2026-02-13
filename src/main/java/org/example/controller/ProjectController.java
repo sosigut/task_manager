@@ -10,7 +10,6 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
 @RestController
 @AllArgsConstructor
@@ -29,6 +28,6 @@ public class ProjectController {
             @RequestParam(required = false) Integer limit,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime cursorCreatedAt,
             @RequestParam(required = false) Long cursorId) {
-        return projectService.getMyProjects(limit, cursorCreatedAt, cursorId);
+        return projectService.getKeysetMyProjects(limit, cursorCreatedAt, cursorId);
     }
 }
