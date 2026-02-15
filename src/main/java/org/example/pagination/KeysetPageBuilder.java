@@ -5,6 +5,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Component
 public class KeysetPageBuilder {
@@ -18,7 +19,7 @@ public class KeysetPageBuilder {
         List<E> entities = sliceResult.getItems();
 
         List<D> dtoItems = entities.stream()
-                .map(mapper).toList();
+                .map(mapper).collect(Collectors.toList());
 
         return KeysetPageResponseDto.<D>builder()
                 .items(dtoItems)

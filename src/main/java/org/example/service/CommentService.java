@@ -10,6 +10,7 @@ import org.example.mapper.CommentMapper;
 import org.example.pagination.*;
 import org.example.repository.CommentRepository;
 import org.example.repository.TaskRepository;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -67,6 +68,7 @@ public class CommentService {
         }
     }
 
+    @Cacheable(value = "commentsPage")
     @PreAuthorize("isAuthenticated()")
     public KeysetPageResponseDto<CommentResponseDto> getKeysetTaskComments(Long taskId,
                                                               Integer limit,
