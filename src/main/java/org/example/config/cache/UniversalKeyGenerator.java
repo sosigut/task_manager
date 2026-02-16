@@ -84,7 +84,7 @@ public class UniversalKeyGenerator implements KeyGenerator{
 
                 String cursorPart = formatCursorPart(cursorCreatedAt, cursorId);
 
-                return String.format("|%s|u=%d|r=%s|scope=%s|task=%d|limit=%d|%s",
+                return String.format("%s|u=%d|r=%s|scope=%s|task=%d|limit=%d|%s",
                         methodName, currentUser.getId(), currentUser.getRole(),
                         scope, taskId, limit, cursorPart);
 
@@ -97,7 +97,7 @@ public class UniversalKeyGenerator implements KeyGenerator{
 
                 String cursorPart = formatCursorPart(cursorCreatedAt, cursorId);
 
-                return String.format("|%s|u=%d|r=%s|limit=%d|%s",
+                return String.format("%s|u=%d|r=%s|limit=%d|%s",
                         methodName, currentUser.getId(), currentUser.getRole(),
                         limit, cursorPart);
 
@@ -111,7 +111,7 @@ public class UniversalKeyGenerator implements KeyGenerator{
 
                 String cursorPart = formatCursorPart(cursorCreatedAt, cursorId);
 
-                return String.format("|%s|u=%d|r=%s|scope=%s|p=%d|limit=%d|%s",
+                return String.format("%s|u=%d|r=%s|scope=%s|p=%d|limit=%d|%s",
                         methodName, currentUser.getId(), currentUser.getRole(),
                         scope, projectId, limit, cursorPart);
 
