@@ -52,23 +52,18 @@ public class CommentService {
 
     private boolean checkCommentPermission(UserEntity currentUser, TaskEntity task){
 
-        ProjectEntity project = task.getProject();
-
         if(currentUser.getRole() == Role.ADMIN || currentUser.getRole() == Role.MANAGER){
             return true;
         } else if(currentUser.getRole() == Role.USER){
-            boolean isAssignee = task.getAssignee().getId().equals(currentUser.getId());
-            boolean isOwner = project.getOwner().getId().equals(currentUser.getId());
-            if(isAssignee){
-                return true;
-            }
-            return isOwner;
+            return task.getAssignee().getId().equals(currentUser.getId());
         } else {
             return false;
         }
+
     }
 
-    @Cacheable(value = "commentsPage")
+    @Cacheable(value = "commentsPage",
+    keyGenerator = "universalKeyGenerator")
     @PreAuthorize("isAuthenticated()")
     public KeysetPageResponseDto<CommentResponseDto> getKeysetTaskComments(Long taskId,
                                                               Integer limit,

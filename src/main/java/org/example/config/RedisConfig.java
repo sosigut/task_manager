@@ -47,7 +47,7 @@ public class RedisConfig {
                                 jsonSerializer
                         )
                 )
-                .entryTtl(Duration.ofDays(7))
+                .entryTtl(Duration.ofMinutes(30))
                 .disableCachingNullValues();
 
         return RedisCacheManager.builder(redisConnectionFactory)

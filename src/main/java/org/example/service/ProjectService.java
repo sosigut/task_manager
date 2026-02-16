@@ -38,7 +38,8 @@ public class ProjectService {
 
     }
 
-    @Cacheable(value = "projectPage")
+    @Cacheable(value = "projectPage",
+            keyGenerator = "universalKeyGenerator")
     @PreAuthorize("isAuthenticated()")
     public KeysetPageResponseDto<ProjectResponseDto> getKeysetMyProjects(Integer limit,
                                                LocalDateTime cursorCreatedAt,

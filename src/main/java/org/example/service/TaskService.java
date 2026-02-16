@@ -111,7 +111,8 @@ public class TaskService {
 
     }
 
-    @Cacheable(value = "taskPages")
+    @Cacheable(value = "taskPages",
+            keyGenerator = "universalKeyGenerator")
     @PreAuthorize("isAuthenticated()")
     public KeysetPageResponseDto<TaskResponseDto> getKeysetTasksByProject(
             Long projectId,
