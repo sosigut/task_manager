@@ -44,7 +44,7 @@ public class UniversalKeyGenerator implements KeyGenerator{
         if (isFirst) {
             return "first";
         } else {
-            return String.format("curcreatAt=%s|curId=%d",
+            return String.format("curCreatAt=%s|curId=%d",
                     cursorCreatedAt.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME), cursorId);
         }
     }
