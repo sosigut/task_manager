@@ -1,6 +1,7 @@
 package org.example.service;
 
 import lombok.AllArgsConstructor;
+import org.example.config.cache.CacheInvalidationService;
 import org.example.dto.CreateProjectRequestDto;
 import org.example.dto.ProjectResponseDto;
 import org.example.entity.ProjectEntity;
@@ -26,6 +27,7 @@ public class ProjectService {
     private final KeysetPageBuilder keysetPageBuilder;
     private final KeysetPaginationUtils keysetPaginationUtils;
     private final KeysetPaginationFetcher keysetPaginationFetcher;
+    private final CacheInvalidationService cacheInvalidationService;
 
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public ProjectResponseDto createProject(CreateProjectRequestDto dto) {
@@ -34,11 +36,13 @@ public class ProjectService {
         ProjectEntity project = projectMapper.toEntity(dto, owner);
         ProjectEntity saved = projectRepository.save(project);
 
+        cacheInvalidationService.evictProjectPagesByUserId(owner.getId());
+
         return projectMapper.toDto(saved);
 
     }
 
-    @Cacheable(value = "projectPage",
+    @Cacheable(value = "projectPages",
             keyGenerator = "universalKeyGenerator")
     @PreAuthorize("isAuthenticated()")
     public KeysetPageResponseDto<ProjectResponseDto> getKeysetMyProjects(Integer limit,

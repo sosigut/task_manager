@@ -1,6 +1,7 @@
 package org.example.service;
 
 import lombok.AllArgsConstructor;
+import org.example.config.cache.CacheInvalidationService;
 import org.example.dto.CreateTaskRequestDto;
 import org.example.dto.TaskHistoryResponseDto;
 import org.example.dto.TaskResponseDto;
@@ -42,6 +43,7 @@ public class TaskService {
     private final KeysetPaginationUtils keysetPaginationUtils;
     private final KeysetPageBuilder pageBuilder;
     private final KeysetPaginationFetcher keysetPaginationFetcher;
+    private final CacheInvalidationService cacheInvalidationService;
 
     private static final Map<Status, Set<Status>> ALLOWED_TRANSITIONS =Map.of(
             Status.TODO, Set.of(Status.IN_PROGRESS),
@@ -50,7 +52,7 @@ public class TaskService {
     );
 
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
-    public TaskResponseDto createTask(Long projectId, CreateTaskRequestDto dto){
+    public TaskResponseDto createTask(Long projectId, CreateTaskRequestDto dto) {
 
         ProjectEntity project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new NotFoundException("Project not found"));
@@ -62,12 +64,14 @@ public class TaskService {
 
         TaskEntity saved = taskRepository.save(task);
 
+        cacheInvalidationService.evictTaskPagesByProjectId(projectId);
+
         return taskMapper.toDto(saved);
 
     }
 
     @PreAuthorize("isAuthenticated()")
-    public TaskResponseDto changeStatus(Long id, Status newStatus){
+    public TaskResponseDto changeStatus(Long id, Status newStatus) {
 
         UserEntity currentUser = userService.getCurrentUser();
 
@@ -96,6 +100,8 @@ public class TaskService {
         task.setStatus(newStatus);
 
         taskRepository.save(task);
+
+        cacheInvalidationService.evictTaskPagesByProjectId(task.getProject().getId());
 
         TaskHistoryEntity taskHistory = TaskHistoryEntity.builder()
                 .oldStatus(oldStatus)

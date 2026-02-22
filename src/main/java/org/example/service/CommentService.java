@@ -1,6 +1,7 @@
 package org.example.service;
 
 import lombok.AllArgsConstructor;
+import org.example.config.cache.CacheInvalidationService;
 import org.example.dto.CommentResponseDto;
 import org.example.dto.CreateCommentRequestDto;
 import org.example.entity.*;
@@ -29,10 +30,11 @@ public class CommentService {
     private final KeysetPaginationFetcher keysetPaginationFetcher;
     private final KeysetPaginationUtils keysetPaginationUtils;
     private final KeysetPageBuilder keysetPageBuilder;
+    private final CacheInvalidationService cacheInvalidationService;
 
     @PreAuthorize("isAuthenticated()")
     public CommentResponseDto createComment
-            (Long taskId, CreateCommentRequestDto dto){
+            (Long taskId, CreateCommentRequestDto dto) {
 
         UserEntity currentUser = userService.getCurrentUser();
         TaskEntity task = taskRepository.findById(taskId)
@@ -46,6 +48,9 @@ public class CommentService {
 
         CommentEntity comment = commentMapper.toEntity(dto, task, currentUser);
         CommentEntity saved =  commentRepository.save(comment);
+
+        cacheInvalidationService.evictCommentPagesByTaskId(taskId);
+
         return commentMapper.toDto(saved);
 
     }
@@ -62,7 +67,7 @@ public class CommentService {
 
     }
 
-    @Cacheable(value = "commentsPage",
+    @Cacheable(value = "commentPages",
     keyGenerator = "universalKeyGenerator")
     @PreAuthorize("isAuthenticated()")
     public KeysetPageResponseDto<CommentResponseDto> getKeysetTaskComments(Long taskId,

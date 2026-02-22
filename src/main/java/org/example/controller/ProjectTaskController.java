@@ -21,7 +21,7 @@ public class ProjectTaskController {
     @PostMapping("/{projectId}/tasks")
     public TaskResponseDto createTask
             (@PathVariable Long projectId,
-             @Valid @RequestBody CreateTaskRequestDto dto){
+             @Valid @RequestBody CreateTaskRequestDto dto) {
         return taskService.createTask(projectId, dto);
     }
 
