@@ -17,7 +17,9 @@ import org.springframework.data.domain.Slice;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 
+import javax.swing.text.html.Option;
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 @Service
 @AllArgsConstructor
@@ -53,6 +55,41 @@ public class CommentService {
 
         return commentMapper.toDto(saved);
 
+    }
+
+    public String deleteComment(Long commentId) {
+
+        Optional<CommentEntity> comment = commentRepository.findById(commentId);
+        UserEntity currentUser = userService.getCurrentUser();
+
+        if(comment.isEmpty()){
+            throw new NotFoundException("Comment not found");
+        }
+
+        CommentEntity commentEntity = comment.get();
+        Long taskId = commentEntity.getTask().getId();
+        boolean flag = isFlag(currentUser, commentEntity);
+
+        if(!flag){
+            throw new ForbiddenException("Недостаточно прав");
+        }
+
+        commentRepository.delete(commentEntity);
+        cacheInvalidationService.evictCommentPagesByTaskId(taskId);
+        return "Удаление выполнено успешно";
+    }
+
+    private static boolean isFlag(UserEntity currentUser, CommentEntity commentEntity) {
+        boolean flag;
+
+        if(currentUser.getRole() == Role.MANAGER || currentUser.getRole() == Role.ADMIN){
+            flag = true;
+        } else if(currentUser.getRole() == Role.USER){
+            flag = commentEntity.getAuthor().getId().equals(currentUser.getId());
+        } else {
+            flag = false;
+        }
+        return flag;
     }
 
     private boolean checkCommentPermission(UserEntity currentUser, TaskEntity task){
