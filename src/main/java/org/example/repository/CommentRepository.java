@@ -35,4 +35,6 @@ public interface CommentRepository extends JpaRepository<CommentEntity,Long> {
             Pageable pageable
     );
 
+    public void deleteByTask_Id(Long taskId);
+
 }

@@ -7,4 +7,5 @@ import java.util.List;
 
 public interface TaskHistoryRepository extends JpaRepository<TaskHistoryEntity, Long> {
     public List<TaskHistoryEntity> findAllByTaskIdOrderByChangedAtAsc(Long taskId);
+    public void deleteByTask_Id(Long taskId);
 }
