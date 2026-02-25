@@ -36,5 +36,6 @@ public interface CommentRepository extends JpaRepository<CommentEntity,Long> {
     );
 
     public void deleteByTask_Id(Long taskId);
+    public void deleteByTask_ProjectId(Long projectId);
 
 }

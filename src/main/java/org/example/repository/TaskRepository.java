@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 public interface TaskRepository extends JpaRepository<TaskEntity, Long> {
 
@@ -68,4 +69,9 @@ public interface TaskRepository extends JpaRepository<TaskEntity, Long> {
             @Param("cursorId") Long cursorId,
             Pageable pageable
     );
+
+    public void deleteByProject_Id(Long projectId);
+
+    @Query("SELECT t.id FROM TaskEntity t WHERE t.project.id = :projectId")
+    public List<Long> findTaskIdsByProject_Id(@Param("projectId") Long projectId);
 }

@@ -11,19 +11,18 @@ import org.example.exception.NotFoundException;
 import org.example.mapper.TaskHistoryMapper;
 import org.example.mapper.TaskMapper;
 import org.example.pagination.*;
-import org.example.repository.ProjectRepository;
-import org.example.repository.TaskHistoryRepository;
-import org.example.repository.TaskRepository;
-import org.example.repository.UserRepository;
+import org.example.repository.*;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Supplier;
@@ -50,6 +49,7 @@ public class TaskService {
             Status.IN_PROGRESS, Set.of(Status.REVISION),
             Status.REVISION, Set.of(Status.IN_PROGRESS)
     );
+    private final CommentRepository commentRepository;
 
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public TaskResponseDto createTask(Long projectId, CreateTaskRequestDto dto) {
@@ -173,6 +173,32 @@ public class TaskService {
                 taskMapper::toDto,
                 pageSize
         );
+    }
+
+    @Transactional
+    @PreAuthorize("isAuthenticated()")
+    public void deleteTask(Long taskId) {
+
+        TaskEntity task = taskRepository.findById(taskId).orElseThrow(() -> new NotFoundException("Task not found"));
+
+        UserEntity currentUser = userService.getCurrentUser();
+
+        boolean flag = isFlag(currentUser);
+
+        if(!flag){
+            throw new ForbiddenException("Недостаточно прав");
+        }
+
+        commentRepository.deleteByTask_Id(taskId);
+        taskHistoryRepository.deleteByTask_Id(taskId);
+        taskRepository.delete(task);
+        cacheInvalidationService.evictCommentPagesByTaskId(task.getId());
+        cacheInvalidationService.evictTaskPagesByProjectId(task.getProject().getId());
+
+    }
+
+    private static boolean isFlag(UserEntity currentUser){
+        return currentUser.getRole() == Role.ADMIN || currentUser.getRole() == Role.MANAGER;
     }
 
     @PreAuthorize("isAuthenticated()")

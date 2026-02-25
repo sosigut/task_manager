@@ -16,8 +16,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import javax.swing.text.html.Option;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
@@ -57,7 +57,9 @@ public class CommentService {
 
     }
 
-    public String deleteComment(Long commentId) {
+    @Transactional
+    @PreAuthorize("isAuthenticated()")
+    public void deleteComment(Long commentId) {
 
         Optional<CommentEntity> comment = commentRepository.findById(commentId);
         UserEntity currentUser = userService.getCurrentUser();
@@ -76,7 +78,6 @@ public class CommentService {
 
         commentRepository.delete(commentEntity);
         cacheInvalidationService.evictCommentPagesByTaskId(taskId);
-        return "Удаление выполнено успешно";
     }
 
     private static boolean isFlag(UserEntity currentUser, CommentEntity commentEntity) {

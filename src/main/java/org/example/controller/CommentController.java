@@ -33,4 +33,9 @@ public class CommentController {
             @RequestParam(required=false) Long cursorId) {
         return commentService.getKeysetTaskComments(taskId, limit, cursorCreatedAt, cursorId);
     }
+
+    @DeleteMapping("/comment/{commentId}")
+    public void deleteComment(@PathVariable Long commentId) {
+        commentService.deleteComment(commentId);
+    }
 }
