@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
 import org.example.dto.CreateTaskRequestDto;
 import org.example.dto.TaskResponseDto;
+import org.example.dto.UpdateTaskRequestDto;
 import org.example.pagination.KeysetPageResponseDto;
 import org.example.service.TaskService;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -35,5 +36,15 @@ public class ProjectTaskController {
         return taskService.getKeysetTasksByProject(projectId, limit, cursorCreatedAt, cursorId);
     }
 
+    @DeleteMapping("/task/{taskId}")
+    public void deleteTask(@PathVariable Long taskId) {
+        taskService.deleteTask(taskId);
+    }
+
+    @PatchMapping("/task/{taskId}")
+    public TaskResponseDto updateTask(@PathVariable Long taskId,
+                                      @Valid @RequestBody UpdateTaskRequestDto dto) {
+        return taskService.updateTask(dto, taskId);
+    }
 
 }

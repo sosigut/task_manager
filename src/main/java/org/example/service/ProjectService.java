@@ -1,9 +1,11 @@
 package org.example.service;
 
 import lombok.AllArgsConstructor;
+import org.apache.coyote.BadRequestException;
 import org.example.config.cache.CacheInvalidationService;
 import org.example.dto.CreateProjectRequestDto;
 import org.example.dto.ProjectResponseDto;
+import org.example.dto.UpdateProjectRequestDto;
 import org.example.entity.ProjectEntity;
 import org.example.entity.Role;
 import org.example.entity.TaskEntity;
@@ -122,6 +124,57 @@ public class ProjectService {
 
     private static boolean isFlag(UserEntity currentUser) {
         return currentUser.getRole() == Role.ADMIN || currentUser.getRole() == Role.MANAGER;
+    }
+
+    @Transactional
+    public ProjectResponseDto updateProject(UpdateProjectRequestDto dto, Long projectId) {
+
+        ProjectEntity project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new NotFoundException("Project not found"));
+        UserEntity currentUser = userService.getCurrentUser();
+
+        if(!isFlag(currentUser)) {
+            throw new ForbiddenException("Недостаточно прав");
+        }
+
+        if(dto.getDescription() == null && dto.getName() == null) {
+            throw new IllegalArgumentException("Нет полей для обновления");
+        }
+
+        if(dto.getDescription() != null) {
+
+            String trimmedDescription = dto.getDescription().trim();
+
+            if(trimmedDescription.isEmpty()) {
+                throw new IllegalArgumentException("Описание проекта не должно быть пусты");
+            }
+
+            if(trimmedDescription.length() > 5000) {
+                throw new IllegalArgumentException("Описание проекта должно быть больше 5000 знаков");
+            }
+
+            project.setDescription(trimmedDescription);
+        }
+
+        if(dto.getName() != null) {
+
+            String trimmedName = dto.getName().trim();
+
+            if(trimmedName.isEmpty()) {
+                throw new IllegalArgumentException("Название проекта не должно быть пусты");
+            }
+
+            if(trimmedName.length() > 200) {
+                throw new IllegalArgumentException("Название проекта не должно быть больше 200 знаков");
+            }
+
+            project.setName(trimmedName);
+        }
+
+        ProjectEntity saveProject = projectRepository.save(project);
+        cacheInvalidationService.evictProjectPagesByUserId(project.getOwner().getId());
+
+        return projectMapper.toDto(saveProject);
     }
 
 }

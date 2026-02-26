@@ -20,11 +20,11 @@ public class TaskEntity implements KeysetEntity {
     private Long id;
 
     @NotBlank
-    @Column(nullable = false)
+    @Column(nullable = false, length = 200)
     private String title;
 
     @NotBlank
-    @Column(nullable = false)
+    @Column(nullable = false, length = 5000)
     private String description;
 
     @Enumerated(EnumType.STRING)

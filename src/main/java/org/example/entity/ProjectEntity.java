@@ -21,11 +21,11 @@ public class ProjectEntity implements KeysetEntity {
     private Long id;
 
     @NotBlank
-    @Column(nullable = false)
+    @Column(nullable = false, length = 200)
     private String name;
 
     @NotBlank
-    @Column(length = 1000)
+    @Column(length = 5000)
     private String description;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)

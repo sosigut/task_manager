@@ -18,7 +18,8 @@ public class TaskController {
     private final TaskService taskService;
 
     @PatchMapping("/{taskId}/status")
-    public TaskResponseDto updateTaskStatus(@PathVariable Long taskId, @Valid @RequestBody UpdateTaskStatusRequestDto dto) {
+    public TaskResponseDto updateTaskStatus(@PathVariable Long taskId,
+                                            @Valid @RequestBody UpdateTaskStatusRequestDto dto) {
         return taskService.changeStatus(taskId, dto.getNewStatus());
     }
 

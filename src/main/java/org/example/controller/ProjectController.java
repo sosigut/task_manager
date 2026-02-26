@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
 import org.example.dto.CreateProjectRequestDto;
 import org.example.dto.ProjectResponseDto;
+import org.example.dto.UpdateProjectRequestDto;
 import org.example.pagination.KeysetPageResponseDto;
 import org.example.service.ProjectService;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -29,5 +30,16 @@ public class ProjectController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime cursorCreatedAt,
             @RequestParam(required = false) Long cursorId) {
         return projectService.getKeysetMyProjects(limit, cursorCreatedAt, cursorId);
+    }
+
+    @DeleteMapping("/{projectId}")
+    public void deleteProject(@PathVariable Long projectId) {
+        projectService.deleteProject(projectId);
+    }
+
+    @PatchMapping("/{projectId}")
+    public ProjectResponseDto updateProject(@PathVariable Long projectId,
+                                            @Valid @RequestBody UpdateProjectRequestDto dto) {
+        return projectService.updateProject(dto, projectId);
     }
 }

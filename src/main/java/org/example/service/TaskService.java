@@ -5,6 +5,7 @@ import org.example.config.cache.CacheInvalidationService;
 import org.example.dto.CreateTaskRequestDto;
 import org.example.dto.TaskHistoryResponseDto;
 import org.example.dto.TaskResponseDto;
+import org.example.dto.UpdateTaskRequestDto;
 import org.example.entity.*;
 import org.example.exception.ForbiddenException;
 import org.example.exception.NotFoundException;
@@ -218,6 +219,64 @@ public class TaskService {
                 .findAllByTaskIdOrderByChangedAtAsc(task.getId());
 
         return history.stream().map(taskHistoryMapper::toDto).collect(Collectors.toList());
+    }
 
+    @Transactional
+    public TaskResponseDto updateTask(UpdateTaskRequestDto dto,  Long taskId) {
+
+        TaskEntity task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new NotFoundException("Task not found"));
+        UserEntity currentUser = userService.getCurrentUser();
+
+        if(!isFlag(currentUser)){
+            throw new ForbiddenException("Недостаточно прав");
+        }
+
+        if(dto.getAssigneeId() == null && dto.getDescription() == null && dto.getTitle() == null){
+            throw new IllegalArgumentException("Нет полей для обновления");
+        }
+
+        if(dto.getTitle() != null){
+
+            String trimmedTitle = dto.getTitle().trim();
+
+            if(trimmedTitle.isEmpty()){
+                throw new IllegalArgumentException("Название задачи не должно быть пустым");
+            }
+
+            if(trimmedTitle.length() > 200){
+                throw new IllegalArgumentException("Название задачи не должно быть больше 200 знаков");
+            }
+
+            task.setTitle(trimmedTitle);
+        }
+
+        if(dto.getDescription() != null){
+
+            String trimmedDescription = dto.getDescription().trim();
+
+            if(trimmedDescription.isEmpty()){
+                throw new IllegalArgumentException("Описание задачи не должно быть пустым");
+            }
+
+            if(trimmedDescription.length() > 5000){
+                throw new IllegalArgumentException("Описание задачи не должно быть больше 5000 знаков");
+            }
+
+            task.setDescription(trimmedDescription);
+        }
+
+        if(dto.getAssigneeId() != null){
+
+            UserEntity assignee = userRepository.findById(dto.getAssigneeId())
+                    .orElseThrow(() -> new NotFoundException("Исполнитель задачи не найден"));
+
+            task.setAssignee(assignee);
+        }
+
+        TaskEntity savedTask = taskRepository.save(task);
+        cacheInvalidationService.evictTaskPagesByProjectId(task.getProject().getId());
+
+        return taskMapper.toDto(savedTask);
     }
 }
