@@ -1,6 +1,21 @@
 server:
   port: 8081
 
+management:
+  server:
+    port: 8082
+    address: 127.0.0.1
+
+  endpoints:
+    web:
+      base-path: /actuator
+      exposure:
+        include: health,info,metrics,prometheus
+
+  endpoint:
+    health:
+      show-details: never
+
 spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/task_manager
