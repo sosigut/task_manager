@@ -1,6 +1,10 @@
 package org.example.service;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import jakarta.annotation.PostConstruct;
 import lombok.AllArgsConstructor;
+import lombok.RequiredArgsConstructor;
 import org.example.config.cache.CacheInvalidationService;
 import org.example.dto.CommentResponseDto;
 import org.example.dto.CreateCommentRequestDto;
@@ -22,7 +26,7 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 
 @Service
-@AllArgsConstructor
+@RequiredArgsConstructor
 public class CommentService {
 
     private final CommentRepository commentRepository;
@@ -33,6 +37,25 @@ public class CommentService {
     private final KeysetPaginationUtils keysetPaginationUtils;
     private final KeysetPageBuilder keysetPageBuilder;
     private final CacheInvalidationService cacheInvalidationService;
+    private final MeterRegistry meterRegistry;
+
+    private Counter commentsCreatedCounter;
+    private Counter commentsDeletedCounter;
+
+    @PostConstruct
+    public void initMetrics(){
+        this.commentsCreatedCounter = Counter.builder
+                        ("task_manager_comments_created_total")
+                .description("Total number of comments created")
+                .tag("service", "task-manager")
+                .register(this.meterRegistry);
+
+        this.commentsDeletedCounter = Counter.builder
+                        ("task_manager_comments_deleted_total")
+                .description("Total number of comment deleted")
+                .tag("service", "task-manager")
+                .register(this.meterRegistry);
+    }
 
     @PreAuthorize("isAuthenticated()")
     public CommentResponseDto createComment
@@ -52,6 +75,8 @@ public class CommentService {
         CommentEntity saved =  commentRepository.save(comment);
 
         cacheInvalidationService.evictCommentPagesByTaskId(taskId);
+
+        commentsCreatedCounter.increment();
 
         return commentMapper.toDto(saved);
 
@@ -78,6 +103,8 @@ public class CommentService {
 
         commentRepository.delete(commentEntity);
         cacheInvalidationService.evictCommentPagesByTaskId(taskId);
+
+        commentsDeletedCounter.increment();
     }
 
     private static boolean isFlag(UserEntity currentUser, CommentEntity commentEntity) {

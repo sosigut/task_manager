@@ -1,6 +1,10 @@
 package org.example.service;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import jakarta.annotation.PostConstruct;
 import lombok.AllArgsConstructor;
+import lombok.RequiredArgsConstructor;
 import org.apache.coyote.BadRequestException;
 import org.example.config.cache.CacheInvalidationService;
 import org.example.dto.CreateProjectRequestDto;
@@ -31,7 +35,7 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
-@AllArgsConstructor
+@RequiredArgsConstructor
 public class ProjectService {
 
     private final ProjectMapper projectMapper;
@@ -44,6 +48,25 @@ public class ProjectService {
     private final TaskRepository taskRepository;
     private final CommentRepository commentRepository;
     private final TaskHistoryRepository taskHistoryRepository;
+    private final MeterRegistry meterRegistry;
+
+    private Counter projectsCreatedCounter;
+    private Counter projectsDeletedCounter;
+
+    @PostConstruct
+    public void initMetrics(){
+        this.projectsCreatedCounter = Counter.builder
+                        ("task_manager_projects_created_total")
+                .description("Total number of projects created")
+                .tag("service", "task-manager")
+                .register(this.meterRegistry);
+
+        this.projectsDeletedCounter = Counter.builder
+                        ("task_manager_projects_delete_total")
+                .description("Total number of projects deleted")
+                .tag("service", "task-manager")
+                .register(this.meterRegistry);
+    }
 
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public ProjectResponseDto createProject(CreateProjectRequestDto dto) {
@@ -53,6 +76,7 @@ public class ProjectService {
         ProjectEntity saved = projectRepository.save(project);
 
         cacheInvalidationService.evictProjectPagesByUserId(owner.getId());
+        projectsCreatedCounter.increment();
 
         return projectMapper.toDto(saved);
 
@@ -119,6 +143,7 @@ public class ProjectService {
         projectRepository.delete(projectEntity);
 
         cacheInvalidationService.evictProjectPagesByUserId(projectEntity.getOwner().getId());
+        projectsDeletedCounter.increment();
 
     }
 
@@ -150,7 +175,7 @@ public class ProjectService {
             }
 
             if(trimmedDescription.length() > 5000) {
-                throw new IllegalArgumentException("Описание проекта должно быть больше 5000 знаков");
+                throw new IllegalArgumentException("Описание проекта не должно быть больше 5000 знаков");
             }
 
             project.setDescription(trimmedDescription);

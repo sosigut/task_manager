@@ -2,6 +2,7 @@ package org.example.service;
 
 import lombok.AllArgsConstructor;
 import org.example.entity.UserEntity;
+import org.example.exception.NotFoundException;
 import org.example.repository.UserRepository;
 import org.springframework.context.annotation.Primary;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -19,11 +20,11 @@ public class UserDetailServiceImpl implements UserDetailsService {
     private UserRepository userRepository;
 
     @Override
-    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+    public UserDetails loadUserByUsername(String username) {
         Optional<UserEntity> userOptional = userRepository.findByEmail(username);
 
         if(!userOptional.isPresent()) {
-            throw new UsernameNotFoundException(username);
+            throw new NotFoundException("Пользователь с таким именем не найден" + username);
         } else  {
             return userOptional.get();
         }

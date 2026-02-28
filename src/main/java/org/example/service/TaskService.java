@@ -1,6 +1,9 @@
 package org.example.service;
 
-import lombok.AllArgsConstructor;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import jakarta.annotation.PostConstruct;
+import lombok.RequiredArgsConstructor;
 import org.example.config.cache.CacheInvalidationService;
 import org.example.dto.CreateTaskRequestDto;
 import org.example.dto.TaskHistoryResponseDto;
@@ -23,14 +26,14 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiFunction;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 @Service
-@AllArgsConstructor
+@RequiredArgsConstructor
 public class TaskService {
 
     private final TaskRepository taskRepository;
@@ -42,15 +45,36 @@ public class TaskService {
     private final TaskHistoryRepository taskHistoryRepository;
     private final KeysetPaginationUtils keysetPaginationUtils;
     private final KeysetPageBuilder pageBuilder;
+    private final CommentRepository commentRepository;
     private final KeysetPaginationFetcher keysetPaginationFetcher;
     private final CacheInvalidationService cacheInvalidationService;
+    private final MeterRegistry meterRegistry;
+
+    private Counter tasksCreatedCounter;
+    private Counter tasksDeletedCounter;
+
+    private final Map<String, Counter> statusChangeCounters = new ConcurrentHashMap<>();
 
     private static final Map<Status, Set<Status>> ALLOWED_TRANSITIONS =Map.of(
             Status.TODO, Set.of(Status.IN_PROGRESS),
             Status.IN_PROGRESS, Set.of(Status.REVISION),
             Status.REVISION, Set.of(Status.IN_PROGRESS)
     );
-    private final CommentRepository commentRepository;
+
+    @PostConstruct
+    public void initMetrics() {
+        this.tasksCreatedCounter = Counter.builder
+                        ("task_manager_tasks_created_total")
+                .description("Total number of tasks created")
+                .tag("service", "task-manager")
+                .register(meterRegistry);
+
+        this.tasksDeletedCounter = Counter.builder
+                        ("task_manager_tasks_deleted_total")
+                .description("Total number of tasks deleted")
+                .tag("service", "task-manager")
+                .register(meterRegistry);
+    }
 
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public TaskResponseDto createTask(Long projectId, CreateTaskRequestDto dto) {
@@ -66,9 +90,22 @@ public class TaskService {
         TaskEntity saved = taskRepository.save(task);
 
         cacheInvalidationService.evictTaskPagesByProjectId(projectId);
+        tasksCreatedCounter.increment();
 
         return taskMapper.toDto(saved);
 
+    }
+
+    private Counter getStatusChangeCounter(Status from, Status to) {
+        String key = from.name() + "->" + to.name();
+
+        return statusChangeCounters.computeIfAbsent(key, k ->
+                Counter.builder("tasks_status_changed_total")
+                        .tag("from", from.name())
+                        .tag("to", to.name())
+                        .tag("service", "task-manager")
+                        .register(meterRegistry)
+        );
     }
 
     @PreAuthorize("isAuthenticated()")
@@ -113,6 +150,8 @@ public class TaskService {
                 .build();
 
         taskHistoryRepository.save(taskHistory);
+
+        getStatusChangeCounter(oldStatus, newStatus).increment();
 
         return taskMapper.toDto(task);
 
@@ -195,6 +234,7 @@ public class TaskService {
         taskRepository.delete(task);
         cacheInvalidationService.evictCommentPagesByTaskId(task.getId());
         cacheInvalidationService.evictTaskPagesByProjectId(task.getProject().getId());
+        tasksDeletedCounter.increment();
 
     }
 
