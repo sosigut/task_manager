@@ -2,6 +2,7 @@ package org.example.service;
 
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import org.example.config.cache.CacheInvalidationService;
@@ -53,6 +54,11 @@ public class TaskService {
     private Counter tasksCreatedCounter;
     private Counter tasksDeletedCounter;
 
+    private Timer taskCreatedTimer;
+    private Timer taskChangeStatusTimer;
+    private Timer taskDeleteTimer;
+    private Timer taskGetTimer;
+
     private final Map<String, Counter> statusChangeCounters = new ConcurrentHashMap<>();
 
     private static final Map<Status, Set<Status>> ALLOWED_TRANSITIONS =Map.of(
@@ -74,25 +80,56 @@ public class TaskService {
                 .description("Total number of tasks deleted")
                 .tag("service", "task-manager")
                 .register(meterRegistry);
+
+        this.taskCreatedTimer = Timer.builder("task_create_timer")
+                .description("Time taken to create a task")
+                .tag("service", "task-manager")
+                .register(meterRegistry);
+
+        this.taskChangeStatusTimer = Timer.builder("task_change_status_timer")
+                .description("Time taken to change task status")
+                .tag("service", "task-manager")
+                .register(meterRegistry);
+
+        this.taskDeleteTimer = Timer.builder("task_delete_timer")
+                .description("Time taken to delete task")
+                .tag("service", "task-manager")
+                .register(meterRegistry);
+
+        this.taskGetTimer = Timer.builder("task_get_timer")
+                .description("Time taken to get tasks")
+                .tag("service", "task-manager")
+                .register(meterRegistry);
+
     }
 
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public TaskResponseDto createTask(Long projectId, CreateTaskRequestDto dto) {
 
-        ProjectEntity project = projectRepository.findById(projectId)
-                .orElseThrow(() -> new NotFoundException("Project not found"));
+        Timer.Sample sample = Timer.start(meterRegistry);
 
-        UserEntity assignee = userRepository.findById(dto.getAssigneeId())
-                .orElseThrow(() -> new NotFoundException("Assignee not found"));
+        try {
+            ProjectEntity project = projectRepository.findById(projectId)
+                    .orElseThrow(() -> new NotFoundException("Project not found"));
 
-        TaskEntity task = taskMapper.toEntity(dto, project, assignee);
+            UserEntity assignee = userRepository.findById(dto.getAssigneeId())
+                    .orElseThrow(() -> new NotFoundException("Assignee not found"));
 
-        TaskEntity saved = taskRepository.save(task);
+            TaskEntity task = taskMapper.toEntity(dto, project, assignee);
 
-        cacheInvalidationService.evictTaskPagesByProjectId(projectId);
-        tasksCreatedCounter.increment();
+            TaskEntity saved = taskRepository.save(task);
 
-        return taskMapper.toDto(saved);
+            cacheInvalidationService.evictTaskPagesByProjectId(projectId);
+            tasksCreatedCounter.increment();
+
+            return taskMapper.toDto(saved);
+
+        } catch (Exception e) {
+
+            sample.stop(taskCreatedTimer);
+            throw e;
+
+        }
 
     }
 
@@ -100,7 +137,7 @@ public class TaskService {
         String key = from.name() + "->" + to.name();
 
         return statusChangeCounters.computeIfAbsent(key, k ->
-                Counter.builder("tasks_status_changed_total")
+                Counter.builder("task_manager_tasks_status_changed_total")
                         .tag("from", from.name())
                         .tag("to", to.name())
                         .tag("service", "task-manager")
@@ -111,50 +148,58 @@ public class TaskService {
     @PreAuthorize("isAuthenticated()")
     public TaskResponseDto changeStatus(Long id, Status newStatus) {
 
-        UserEntity currentUser = userService.getCurrentUser();
+        Timer.Sample sample = Timer.start(meterRegistry);
 
-        TaskEntity task = taskRepository.findById(id)
-                .orElseThrow(() -> new NotFoundException("Task not found"));
+        try{
+            UserEntity currentUser = userService.getCurrentUser();
 
-        Status oldStatus = task.getStatus();
+            TaskEntity task = taskRepository.findById(id)
+                    .orElseThrow(() -> new NotFoundException("Task not found"));
 
-        if(currentUser.getRole() == Role.USER &&
-                !currentUser.getId().equals(task.getAssignee().getId())) {
-            throw new ForbiddenException("Только исполнитель задачи может изменить ее статус");
-        }
+            Status oldStatus = task.getStatus();
 
-        if(currentUser.getRole() == Role.USER && newStatus == Status.DONE){
-            throw new ForbiddenException("Недостаточно прав доступа");
-        }
-
-        if(currentUser.getRole() == Role.USER){
-            Set<Status> allowedNewStatuses = ALLOWED_TRANSITIONS.get(oldStatus);
-
-            if(allowedNewStatuses == null || !allowedNewStatuses.contains(newStatus)){
-                throw new ForbiddenException(String.format("Недопустимый переход статуса: %s -> %s.", oldStatus, newStatus));
+            if(currentUser.getRole() == Role.USER &&
+                    !currentUser.getId().equals(task.getAssignee().getId())) {
+                throw new ForbiddenException("Только исполнитель задачи может изменить ее статус");
             }
+
+            if(currentUser.getRole() == Role.USER && newStatus == Status.DONE){
+                throw new ForbiddenException("Недостаточно прав доступа");
+            }
+
+            if(currentUser.getRole() == Role.USER){
+                Set<Status> allowedNewStatuses = ALLOWED_TRANSITIONS.get(oldStatus);
+
+                if(allowedNewStatuses == null || !allowedNewStatuses.contains(newStatus)){
+                    throw new ForbiddenException(String.format("Недопустимый переход статуса: %s -> %s.", oldStatus, newStatus));
+                }
+            }
+
+            task.setStatus(newStatus);
+
+            taskRepository.save(task);
+
+            cacheInvalidationService.evictTaskPagesByProjectId(task.getProject().getId());
+
+            TaskHistoryEntity taskHistory = TaskHistoryEntity.builder()
+                    .oldStatus(oldStatus)
+                    .newStatus(newStatus)
+                    .task(task)
+                    .changedBy(currentUser)
+                    .changedAt(LocalDateTime.now())
+                    .build();
+
+            taskHistoryRepository.save(taskHistory);
+
+            getStatusChangeCounter(oldStatus, newStatus).increment();
+
+            return taskMapper.toDto(task);
+        } catch (Exception e) {
+
+            sample.stop(taskChangeStatusTimer);
+            throw e;
+
         }
-
-        task.setStatus(newStatus);
-
-        taskRepository.save(task);
-
-        cacheInvalidationService.evictTaskPagesByProjectId(task.getProject().getId());
-
-        TaskHistoryEntity taskHistory = TaskHistoryEntity.builder()
-                .oldStatus(oldStatus)
-                .newStatus(newStatus)
-                .task(task)
-                .changedBy(currentUser)
-                .changedAt(LocalDateTime.now())
-                .build();
-
-        taskHistoryRepository.save(taskHistory);
-
-        getStatusChangeCounter(oldStatus, newStatus).increment();
-
-        return taskMapper.toDto(task);
-
     }
 
     @Cacheable(value = "taskPages",
@@ -167,75 +212,94 @@ public class TaskService {
             Long cursorId
     ) throws NotFoundException {
 
-        PaginationMode mode = keysetPaginationUtils.cursorMode(cursorCreatedAt, cursorId);
-        int pageSize = keysetPaginationUtils.normalizeLimit(limit);
-        Pageable pageable = keysetPaginationUtils.createPageable(pageSize);
+        Timer.Sample sample = Timer.start(meterRegistry);
 
-        Supplier<Slice<TaskEntity>> firstPageSupplier;
-        BiFunction<LocalDateTime, Long, Slice<TaskEntity>> nextPageSupplier;
+        try {
+            PaginationMode mode = keysetPaginationUtils.cursorMode(cursorCreatedAt, cursorId);
+            int pageSize = keysetPaginationUtils.normalizeLimit(limit);
+            Pageable pageable = keysetPaginationUtils.createPageable(pageSize);
 
-        UserEntity currentUser = userService.getCurrentUser();
+            Supplier<Slice<TaskEntity>> firstPageSupplier;
+            BiFunction<LocalDateTime, Long, Slice<TaskEntity>> nextPageSupplier;
 
-        ProjectEntity project = projectRepository.findById(projectId)
-                .orElseThrow(() -> new NotFoundException("Project not found"));
+            UserEntity currentUser = userService.getCurrentUser();
 
-        boolean isAdminOrManager = currentUser.getRole() == Role.ADMIN ||
-                currentUser.getRole() == Role.MANAGER;
+            ProjectEntity project = projectRepository.findById(projectId)
+                    .orElseThrow(() -> new NotFoundException("Project not found"));
 
-        if (isAdminOrManager) {
-            firstPageSupplier = () -> taskRepository.findFirstPageByProjectId(project.getId(), pageable);
-            nextPageSupplier = (createdAt, id) ->
-                    taskRepository.findNextByProjectIdAfterCursor(project.getId(), createdAt, id, pageable);
-        } else {
-            firstPageSupplier = () -> taskRepository.findFirstPageByProjectIdAndAssigneeId(
-                    project.getId(), currentUser.getId(), pageable);
-            nextPageSupplier = (createdAt, id) ->
-                    taskRepository.findNextByProjectIdAndAssigneeIdAfterCursor(
-                            project.getId(), currentUser.getId(), createdAt, id, pageable);
+            boolean isAdminOrManager = currentUser.getRole() == Role.ADMIN ||
+                    currentUser.getRole() == Role.MANAGER;
+
+            if (isAdminOrManager) {
+                firstPageSupplier = () -> taskRepository.findFirstPageByProjectId(project.getId(), pageable);
+                nextPageSupplier = (createdAt, id) ->
+                        taskRepository.findNextByProjectIdAfterCursor(project.getId(), createdAt, id, pageable);
+            } else {
+                firstPageSupplier = () -> taskRepository.findFirstPageByProjectIdAndAssigneeId(
+                        project.getId(), currentUser.getId(), pageable);
+                nextPageSupplier = (createdAt, id) ->
+                        taskRepository.findNextByProjectIdAndAssigneeIdAfterCursor(
+                                project.getId(), currentUser.getId(), createdAt, id, pageable);
+            }
+
+            Slice<TaskEntity> slice = keysetPaginationFetcher.fetchSlice(
+                    mode,
+                    firstPageSupplier,
+                    nextPageSupplier,
+                    cursorCreatedAt,
+                    cursorId
+            );
+
+            KeysetSliceResult<TaskEntity> sliceResult =
+                    keysetPaginationUtils.trim(
+                            slice,
+                            pageSize
+                    );
+
+            return pageBuilder.universalBuilder(
+                    sliceResult,
+                    taskMapper::toDto,
+                    pageSize
+            );
+        } catch (Exception e) {
+
+            sample.stop(taskGetTimer);
+            throw e;
+
         }
 
-        Slice<TaskEntity> slice = keysetPaginationFetcher.fetchSlice(
-                mode,
-                firstPageSupplier,
-                nextPageSupplier,
-                cursorCreatedAt,
-                cursorId
-        );
 
-        KeysetSliceResult<TaskEntity> sliceResult =
-                keysetPaginationUtils.trim(
-                        slice,
-                        pageSize
-                );
-
-        return pageBuilder.universalBuilder(
-                sliceResult,
-                taskMapper::toDto,
-                pageSize
-        );
     }
 
     @Transactional
     @PreAuthorize("isAuthenticated()")
     public void deleteTask(Long taskId) {
 
-        TaskEntity task = taskRepository.findById(taskId).orElseThrow(() -> new NotFoundException("Task not found"));
+        Timer.Sample sample = Timer.start();
 
-        UserEntity currentUser = userService.getCurrentUser();
+        try{
+            TaskEntity task = taskRepository.findById(taskId).orElseThrow(() -> new NotFoundException("Task not found"));
 
-        boolean flag = isFlag(currentUser);
+            UserEntity currentUser = userService.getCurrentUser();
 
-        if(!flag){
-            throw new ForbiddenException("Недостаточно прав");
+            boolean flag = isFlag(currentUser);
+
+            if(!flag){
+                throw new ForbiddenException("Недостаточно прав");
+            }
+
+            commentRepository.deleteByTask_Id(taskId);
+            taskHistoryRepository.deleteByTask_Id(taskId);
+            taskRepository.delete(task);
+            cacheInvalidationService.evictCommentPagesByTaskId(task.getId());
+            cacheInvalidationService.evictTaskPagesByProjectId(task.getProject().getId());
+            tasksDeletedCounter.increment();
+        } catch(Exception e){
+
+            sample.stop(taskDeleteTimer);
+            throw e;
+
         }
-
-        commentRepository.deleteByTask_Id(taskId);
-        taskHistoryRepository.deleteByTask_Id(taskId);
-        taskRepository.delete(task);
-        cacheInvalidationService.evictCommentPagesByTaskId(task.getId());
-        cacheInvalidationService.evictTaskPagesByProjectId(task.getProject().getId());
-        tasksDeletedCounter.increment();
-
     }
 
     private static boolean isFlag(UserEntity currentUser){
