@@ -2,6 +2,7 @@ package org.example.service;
 
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import jakarta.annotation.PostConstruct;
 import lombok.AllArgsConstructor;
 import lombok.RequiredArgsConstructor;
@@ -42,6 +43,10 @@ public class CommentService {
     private Counter commentsCreatedCounter;
     private Counter commentsDeletedCounter;
 
+    private Timer commentCreatedTimer;
+    private Timer commentDeletedTimer;
+    private Timer commentGetTimer;
+
     @PostConstruct
     public void initMetrics(){
         this.commentsCreatedCounter = Counter.builder
@@ -55,56 +60,82 @@ public class CommentService {
                 .description("Total number of comment deleted")
                 .tag("service", "task-manager")
                 .register(this.meterRegistry);
+
+        this.commentCreatedTimer = Timer.builder("task_manager_comment_create_timer")
+                .description("Time taken to create a comment")
+                .tag("service", "task-manager")
+                .register(this.meterRegistry);
+
+        this.commentDeletedTimer = Timer.builder("task_manager_comment_delete_timer")
+                .description("Time taken to delete a comment")
+                .tag("service", "task-manager")
+                .register(this.meterRegistry);
+
+        this.commentGetTimer = Timer.builder("task_manager_comment_get_timer")
+                .description("Time taken to get comments")
+                .tag("service", "task-manager")
+                .register(this.meterRegistry);
     }
 
     @PreAuthorize("isAuthenticated()")
     public CommentResponseDto createComment
             (Long taskId, CreateCommentRequestDto dto) {
 
-        UserEntity currentUser = userService.getCurrentUser();
-        TaskEntity task = taskRepository.findById(taskId)
-                .orElseThrow(()-> new NotFoundException("Task not found"));
+        Timer.Sample sample = Timer.start(meterRegistry);
 
-        boolean isAllowed = checkCommentPermission(currentUser, task);
+        try {
+            UserEntity currentUser = userService.getCurrentUser();
+            TaskEntity task = taskRepository.findById(taskId)
+                    .orElseThrow(()-> new NotFoundException("Task not found"));
 
-        if(!isAllowed){
-            throw new ForbiddenException("Недостаточно прав");
+            boolean isAllowed = checkCommentPermission(currentUser, task);
+
+            if(!isAllowed){
+                throw new ForbiddenException("Недостаточно прав");
+            }
+
+            CommentEntity comment = commentMapper.toEntity(dto, task, currentUser);
+            CommentEntity saved =  commentRepository.save(comment);
+
+            cacheInvalidationService.evictCommentPagesByTaskId(taskId);
+
+            commentsCreatedCounter.increment();
+
+            return commentMapper.toDto(saved);
+        } finally {
+            sample.stop(commentCreatedTimer);
         }
-
-        CommentEntity comment = commentMapper.toEntity(dto, task, currentUser);
-        CommentEntity saved =  commentRepository.save(comment);
-
-        cacheInvalidationService.evictCommentPagesByTaskId(taskId);
-
-        commentsCreatedCounter.increment();
-
-        return commentMapper.toDto(saved);
-
     }
 
     @Transactional
     @PreAuthorize("isAuthenticated()")
     public void deleteComment(Long commentId) {
 
-        Optional<CommentEntity> comment = commentRepository.findById(commentId);
-        UserEntity currentUser = userService.getCurrentUser();
+        Timer.Sample sample = Timer.start(meterRegistry);
 
-        if(comment.isEmpty()){
-            throw new NotFoundException("Comment not found");
+        try {
+            Optional<CommentEntity> comment = commentRepository.findById(commentId);
+            UserEntity currentUser = userService.getCurrentUser();
+
+            if(comment.isEmpty()){
+                throw new NotFoundException("Comment not found");
+            }
+
+            CommentEntity commentEntity = comment.get();
+            Long taskId = commentEntity.getTask().getId();
+            boolean flag = isFlag(currentUser, commentEntity);
+
+            if(!flag){
+                throw new ForbiddenException("Недостаточно прав");
+            }
+
+            commentRepository.delete(commentEntity);
+            cacheInvalidationService.evictCommentPagesByTaskId(taskId);
+
+            commentsDeletedCounter.increment();
+        } finally {
+            sample.stop(commentDeletedTimer);
         }
-
-        CommentEntity commentEntity = comment.get();
-        Long taskId = commentEntity.getTask().getId();
-        boolean flag = isFlag(currentUser, commentEntity);
-
-        if(!flag){
-            throw new ForbiddenException("Недостаточно прав");
-        }
-
-        commentRepository.delete(commentEntity);
-        cacheInvalidationService.evictCommentPagesByTaskId(taskId);
-
-        commentsDeletedCounter.increment();
     }
 
     private static boolean isFlag(UserEntity currentUser, CommentEntity commentEntity) {
@@ -140,43 +171,47 @@ public class CommentService {
                                                               LocalDateTime cursorCreatedAt,
                                                               Long cursorId) {
 
-        PaginationMode mode =  keysetPaginationUtils.cursorMode(cursorCreatedAt, cursorId);
-        int pageSize = keysetPaginationUtils.normalizeLimit(limit);
-        Pageable pageable = keysetPaginationUtils.createPageable(pageSize);
+        Timer.Sample sample = Timer.start(meterRegistry);
 
-        UserEntity currentUser = userService.getCurrentUser();
+        try {
+            PaginationMode mode =  keysetPaginationUtils.cursorMode(cursorCreatedAt, cursorId);
+            int pageSize = keysetPaginationUtils.normalizeLimit(limit);
+            Pageable pageable = keysetPaginationUtils.createPageable(pageSize);
 
-        TaskEntity task = taskRepository.findById(taskId)
-                .orElseThrow(()-> new NotFoundException("Task not found"));
+            UserEntity currentUser = userService.getCurrentUser();
 
-        boolean isAllowed = checkCommentPermission(currentUser, task);
+            TaskEntity task = taskRepository.findById(taskId)
+                    .orElseThrow(()-> new NotFoundException("Task not found"));
 
-        if(!isAllowed){
-            throw new ForbiddenException("Недостаточно прав");
+            boolean isAllowed = checkCommentPermission(currentUser, task);
+
+            if(!isAllowed){
+                throw new ForbiddenException("Недостаточно прав");
+            }
+
+            Slice<CommentEntity> slice = keysetPaginationFetcher.fetchSlice(
+                    mode,
+                    () -> commentRepository.findFirstPageByTaskIdOrderByCreatedAtAndIdDesc(
+                            task.getId(), pageable
+                    ),
+                    (createdAt, id) -> commentRepository.findNextPageByTaskIdOrderByCreatedAtAndIdDescAfterCursor(
+                            task.getId(), createdAt, id, pageable
+                    ),
+                    cursorCreatedAt,
+                    cursorId
+            );
+
+            KeysetSliceResult<CommentEntity> sliceResult = keysetPaginationUtils.trim(
+                    slice, pageSize
+            );
+
+            return keysetPageBuilder.universalBuilder(
+                    sliceResult,
+                    commentMapper::toDto,
+                    pageSize
+            );
+        } finally {
+            sample.stop(commentGetTimer);
         }
-
-        Slice<CommentEntity> slice = keysetPaginationFetcher.fetchSlice(
-                mode,
-                () -> commentRepository.findFirstPageByTaskIdOrderByCreatedAtAndIdDesc(
-                      task.getId(), pageable
-                ),
-                (createdAt, id) -> commentRepository.findNextPageByTaskIdOrderByCreatedAtAndIdDescAfterCursor(
-                        task.getId(), createdAt, id, pageable
-                ),
-                cursorCreatedAt,
-                cursorId
-        );
-
-        KeysetSliceResult<CommentEntity> sliceResult = keysetPaginationUtils.trim(
-                slice, pageSize
-        );
-
-        return keysetPageBuilder.universalBuilder(
-                sliceResult,
-                commentMapper::toDto,
-                pageSize
-        );
-
     }
-
 }

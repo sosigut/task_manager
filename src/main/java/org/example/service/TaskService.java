@@ -58,6 +58,8 @@ public class TaskService {
     private Timer taskChangeStatusTimer;
     private Timer taskDeleteTimer;
     private Timer taskGetTimer;
+    private Timer taskHistoryGetTimer;
+    private Timer taskUpdateTimer;
 
     private final Map<String, Counter> statusChangeCounters = new ConcurrentHashMap<>();
 
@@ -81,23 +83,33 @@ public class TaskService {
                 .tag("service", "task-manager")
                 .register(meterRegistry);
 
-        this.taskCreatedTimer = Timer.builder("task_create_timer")
+        this.taskCreatedTimer = Timer.builder("task_manager_task_create_timer")
                 .description("Time taken to create a task")
                 .tag("service", "task-manager")
                 .register(meterRegistry);
 
-        this.taskChangeStatusTimer = Timer.builder("task_change_status_timer")
+        this.taskChangeStatusTimer = Timer.builder("task_manager_task_change_status_timer")
                 .description("Time taken to change task status")
                 .tag("service", "task-manager")
                 .register(meterRegistry);
 
-        this.taskDeleteTimer = Timer.builder("task_delete_timer")
+        this.taskDeleteTimer = Timer.builder("task_manager_task_delete_timer")
                 .description("Time taken to delete task")
                 .tag("service", "task-manager")
                 .register(meterRegistry);
 
-        this.taskGetTimer = Timer.builder("task_get_timer")
+        this.taskGetTimer = Timer.builder("task_manager_task_get_timer")
                 .description("Time taken to get tasks")
+                .tag("service", "task-manager")
+                .register(meterRegistry);
+
+        this.taskUpdateTimer = Timer.builder("task_manager_task_update_timer")
+                .description("Time taken to update tasks")
+                .tag("service", "task-manager")
+                .register(meterRegistry);
+
+        this.taskHistoryGetTimer = Timer.builder("task_manager_task_get_history_timer")
+                .description("Time taken to get task history")
                 .tag("service", "task-manager")
                 .register(meterRegistry);
 
@@ -124,11 +136,8 @@ public class TaskService {
 
             return taskMapper.toDto(saved);
 
-        } catch (Exception e) {
-
+        } finally {
             sample.stop(taskCreatedTimer);
-            throw e;
-
         }
 
     }
@@ -194,11 +203,8 @@ public class TaskService {
             getStatusChangeCounter(oldStatus, newStatus).increment();
 
             return taskMapper.toDto(task);
-        } catch (Exception e) {
-
+        } finally {
             sample.stop(taskChangeStatusTimer);
-            throw e;
-
         }
     }
 
@@ -261,21 +267,16 @@ public class TaskService {
                     taskMapper::toDto,
                     pageSize
             );
-        } catch (Exception e) {
-
+        } finally {
             sample.stop(taskGetTimer);
-            throw e;
-
         }
-
-
     }
 
     @Transactional
     @PreAuthorize("isAuthenticated()")
     public void deleteTask(Long taskId) {
 
-        Timer.Sample sample = Timer.start();
+        Timer.Sample sample = Timer.start(meterRegistry);
 
         try{
             TaskEntity task = taskRepository.findById(taskId).orElseThrow(() -> new NotFoundException("Task not found"));
@@ -294,11 +295,8 @@ public class TaskService {
             cacheInvalidationService.evictCommentPagesByTaskId(task.getId());
             cacheInvalidationService.evictTaskPagesByProjectId(task.getProject().getId());
             tasksDeletedCounter.increment();
-        } catch(Exception e){
-
+        } finally {
             sample.stop(taskDeleteTimer);
-            throw e;
-
         }
     }
 
@@ -309,78 +307,91 @@ public class TaskService {
     @PreAuthorize("isAuthenticated()")
     public List<TaskHistoryResponseDto> getTaskHistory(Long taskId) {
 
-        UserEntity currentUser = userService.getCurrentUser();
+        Timer.Sample sample = Timer.start(meterRegistry);
 
-        TaskEntity task =  taskRepository.findById(taskId)
-                .orElseThrow(() -> new NotFoundException("Task not found"));
+        try {
+            UserEntity currentUser = userService.getCurrentUser();
 
-        if(currentUser.getRole() == Role.USER
-                && !currentUser.getId().equals(task.getAssignee().getId())) {
-            throw new ForbiddenException("Недостаточно прав доступа");
+            TaskEntity task =  taskRepository.findById(taskId)
+                    .orElseThrow(() -> new NotFoundException("Task not found"));
+
+            if(currentUser.getRole() == Role.USER
+                    && !currentUser.getId().equals(task.getAssignee().getId())) {
+                throw new ForbiddenException("Недостаточно прав доступа");
+            }
+
+            List<TaskHistoryEntity> history = taskHistoryRepository
+                    .findAllByTaskIdOrderByChangedAtAsc(task.getId());
+
+            return history.stream().map(taskHistoryMapper::toDto).collect(Collectors.toList());
+        } finally {
+            sample.stop(taskHistoryGetTimer);
         }
-
-        List<TaskHistoryEntity> history = taskHistoryRepository
-                .findAllByTaskIdOrderByChangedAtAsc(task.getId());
-
-        return history.stream().map(taskHistoryMapper::toDto).collect(Collectors.toList());
     }
 
     @Transactional
     public TaskResponseDto updateTask(UpdateTaskRequestDto dto,  Long taskId) {
 
-        TaskEntity task = taskRepository.findById(taskId)
-                .orElseThrow(() -> new NotFoundException("Task not found"));
-        UserEntity currentUser = userService.getCurrentUser();
+        Timer.Sample sample = Timer.start(meterRegistry);
 
-        if(!isFlag(currentUser)){
-            throw new ForbiddenException("Недостаточно прав");
-        }
+        try{
 
-        if(dto.getAssigneeId() == null && dto.getDescription() == null && dto.getTitle() == null){
-            throw new IllegalArgumentException("Нет полей для обновления");
-        }
+            TaskEntity task = taskRepository.findById(taskId)
+                    .orElseThrow(() -> new NotFoundException("Task not found"));
+            UserEntity currentUser = userService.getCurrentUser();
 
-        if(dto.getTitle() != null){
-
-            String trimmedTitle = dto.getTitle().trim();
-
-            if(trimmedTitle.isEmpty()){
-                throw new IllegalArgumentException("Название задачи не должно быть пустым");
+            if(!isFlag(currentUser)){
+                throw new ForbiddenException("Недостаточно прав");
             }
 
-            if(trimmedTitle.length() > 200){
-                throw new IllegalArgumentException("Название задачи не должно быть больше 200 знаков");
+            if(dto.getAssigneeId() == null && dto.getDescription() == null && dto.getTitle() == null){
+                throw new IllegalArgumentException("Нет полей для обновления");
             }
 
-            task.setTitle(trimmedTitle);
-        }
+            if(dto.getTitle() != null){
 
-        if(dto.getDescription() != null){
+                String trimmedTitle = dto.getTitle().trim();
 
-            String trimmedDescription = dto.getDescription().trim();
+                if(trimmedTitle.isEmpty()){
+                    throw new IllegalArgumentException("Название задачи не должно быть пустым");
+                }
 
-            if(trimmedDescription.isEmpty()){
-                throw new IllegalArgumentException("Описание задачи не должно быть пустым");
+                if(trimmedTitle.length() > 200){
+                    throw new IllegalArgumentException("Название задачи не должно быть больше 200 знаков");
+                }
+
+                task.setTitle(trimmedTitle);
             }
 
-            if(trimmedDescription.length() > 5000){
-                throw new IllegalArgumentException("Описание задачи не должно быть больше 5000 знаков");
+            if(dto.getDescription() != null){
+
+                String trimmedDescription = dto.getDescription().trim();
+
+                if(trimmedDescription.isEmpty()){
+                    throw new IllegalArgumentException("Описание задачи не должно быть пустым");
+                }
+
+                if(trimmedDescription.length() > 5000){
+                    throw new IllegalArgumentException("Описание задачи не должно быть больше 5000 знаков");
+                }
+
+                task.setDescription(trimmedDescription);
             }
 
-            task.setDescription(trimmedDescription);
+            if(dto.getAssigneeId() != null){
+
+                UserEntity assignee = userRepository.findById(dto.getAssigneeId())
+                        .orElseThrow(() -> new NotFoundException("Исполнитель задачи не найден"));
+
+                task.setAssignee(assignee);
+            }
+
+            TaskEntity savedTask = taskRepository.save(task);
+            cacheInvalidationService.evictTaskPagesByProjectId(task.getProject().getId());
+
+            return taskMapper.toDto(savedTask);
+        } finally {
+            sample.stop(taskUpdateTimer);
         }
-
-        if(dto.getAssigneeId() != null){
-
-            UserEntity assignee = userRepository.findById(dto.getAssigneeId())
-                    .orElseThrow(() -> new NotFoundException("Исполнитель задачи не найден"));
-
-            task.setAssignee(assignee);
-        }
-
-        TaskEntity savedTask = taskRepository.save(task);
-        cacheInvalidationService.evictTaskPagesByProjectId(task.getProject().getId());
-
-        return taskMapper.toDto(savedTask);
     }
 }
