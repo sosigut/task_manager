@@ -8,6 +8,7 @@ management:
   metrics:
     distribution:
       percentiles-histogram:
+        http.server.requests: true
         task_manager_task_create_timer: true
         task_manager_task_change_status_timer: true
         task_manager_task_delete_timer: true

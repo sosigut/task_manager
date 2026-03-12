@@ -146,7 +146,7 @@ public class TaskService {
         String key = from.name() + "->" + to.name();
 
         return statusChangeCounters.computeIfAbsent(key, k ->
-                Counter.builder("task_manager_tasks_status_changed_total")
+                Counter.builder("task_manager_task_status_changed_total")
                         .tag("from", from.name())
                         .tag("to", to.name())
                         .tag("service", "task-manager")
