@@ -66,5 +66,5 @@ spring:
 security:
   jwt:
     secret: "2ffasvaVBSDSCLAeac453fdbHNGs324t6j5m5ERVyun9765453grnrthge3wefWEg42qwfEG54hsh4ehaa4hnxfngnxTRJZe4gawag43h5ahhhj5$J32gba5j65m5SNAE3fWEobdfhidbzmfwpoe"
-    access-token-expiration: 15m
-    refresh-token-expiration: 7d
+    access-token-expiration: 60d
+    refresh-token-expiration: 60d
