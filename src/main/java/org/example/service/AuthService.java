@@ -2,6 +2,7 @@ package org.example.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.example.config.PasswordEncoderConfig;
 import org.example.dto.LoginRequestDto;
 import org.example.dto.LoginResponseDto;
@@ -14,6 +15,8 @@ import org.example.repository.UserRepository;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.Locale;
+import java.util.Random;
 
 @Slf4j
 @Service
@@ -28,6 +31,12 @@ public class AuthService {
     public UserResponseDto register (RegisterRequestDto registerRequestDto) throws Exception{
         String email = registerRequestDto.getEmail().toLowerCase().trim();
 
+        String publicUid = RandomStringUtils.randomAlphanumeric(10).toUpperCase(Locale.ROOT);
+
+        if(userRepository.existsByPublicUid(publicUid)){
+            publicUid=RandomStringUtils.randomAlphanumeric(10).toUpperCase(Locale.ROOT);
+        }
+
         if (userRepository.existsByEmail(email)) {
             throw new Exception("Email already exists");
         }
@@ -35,6 +44,7 @@ public class AuthService {
         String hashedPassword = passwordEncoderConfig.hashPassword(registerRequestDto.getPassword());
 
         UserEntity userEntity = UserEntity.builder()
+                .publicUid(publicUid)
                 .email(email)
                 .password(hashedPassword)
                 .firstName(registerRequestDto.getFirstname().trim())

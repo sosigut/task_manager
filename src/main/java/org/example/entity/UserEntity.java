@@ -25,6 +25,10 @@ public class UserEntity implements UserDetails {
 
     @NotBlank
     @Column(nullable = false, unique = true)
+    private String publicUid;
+
+    @NotBlank
+    @Column(nullable = false, unique = true)
     @Email
     private String email;
 
