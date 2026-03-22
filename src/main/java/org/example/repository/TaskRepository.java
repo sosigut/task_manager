@@ -70,8 +70,8 @@ public interface TaskRepository extends JpaRepository<TaskEntity, Long> {
             Pageable pageable
     );
 
-    public void deleteByProject_Id(Long projectId);
+    void deleteByProject_Id(Long projectId);
 
     @Query("SELECT t.id FROM TaskEntity t WHERE t.project.id = :projectId")
-    public List<Long> findTaskIdsByProject_Id(@Param("projectId") Long projectId);
+    List<Long> findTaskIdsByProject_Id(@Param("projectId") Long projectId);
 }

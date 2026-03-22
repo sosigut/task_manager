@@ -1,5 +1,6 @@
 package org.example.mapper;
 
+import org.example.dto.PublicUidSearchResposeDto;
 import org.example.dto.RegisterRequestDto;
 import org.example.dto.UserResponseDto;
 import org.example.entity.UserEntity;
@@ -35,6 +36,19 @@ public class UserMapper {
                 .lastname(user.getLastName())
                 .role(user.getRole() != null ? user.getRole().name() : null)
                 .createdAt(LocalDateTime.now())
+                .build();
+    }
+
+    public PublicUidSearchResposeDto searchToDto(UserEntity user, String publicUid){
+        if (user == null) {
+            return null;
+        }
+
+        return PublicUidSearchResposeDto.builder()
+                .id(user.getId())
+                .publicUid(publicUid)
+                .firstName(user.getFirstName())
+                .lastName(user.getLastName())
                 .build();
     }
 
