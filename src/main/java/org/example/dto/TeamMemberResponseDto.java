@@ -14,7 +14,7 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 public class TeamMemberResponseDto {
 
-    private Long id;
+    private Long userId;
 
     private String publicUid;
 

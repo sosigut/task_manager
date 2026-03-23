@@ -31,12 +31,14 @@ public class TeamService {
     private final TeamMapper teamMapper;
     private final TeamMemberMapper teamMemberMapper;
 
-    @Transactional
-    @PreAuthorize("isAuthenticated()")
-    public TeamResponseDto createTeam(CreateTeamRequestDto dto){
+    private String getString(CreateTeamRequestDto dto) {
+        String teamName = dto.getTeamName();
 
-        UserEntity currentUser = userService.getCurrentUser();
-        String trimmedTeamName = dto.getTeamName().trim();
+        if(dto == null || teamName == null){
+            throw new ForbiddenException("Team Name is null or Team Name is empty");
+        }
+
+        String trimmedTeamName = teamName.trim();
 
         if(trimmedTeamName.isEmpty()){
             throw new IllegalArgumentException("Название команды не должно быть пусты");
@@ -45,6 +47,15 @@ public class TeamService {
         if(trimmedTeamName.length() > 100){
             throw new IllegalArgumentException("Название команды не должно превышать 100 символов");
         }
+        return trimmedTeamName;
+    }
+
+    @Transactional
+    @PreAuthorize("isAuthenticated()")
+    public TeamResponseDto createTeam(CreateTeamRequestDto dto){
+
+        UserEntity currentUser = userService.getCurrentUser();
+        String trimmedTeamName = getString(dto);
 
         TeamEntity team = TeamEntity.builder()
                 .name(trimmedTeamName)
@@ -66,6 +77,7 @@ public class TeamService {
         return teamMapper.toDto(savedTeam);
     }
 
+    @PreAuthorize("isAuthenticated()")
     public List<TeamResponseDto> getMyTeams(){
 
         UserEntity currentUser = userService.getCurrentUser();
@@ -76,6 +88,7 @@ public class TeamService {
 
     }
 
+    @PreAuthorize("isAuthenticated()")
     public List<TeamMemberResponseDto> getTeamMembers(Long teamId){
 
         UserEntity currentUser = userService.getCurrentUser();

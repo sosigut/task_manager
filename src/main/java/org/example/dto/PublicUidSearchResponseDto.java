@@ -9,7 +9,7 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class PublicUidSearchResposeDto {
+public class PublicUidSearchResponseDto {
 
     private Long id;
 

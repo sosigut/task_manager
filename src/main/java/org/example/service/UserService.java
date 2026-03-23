@@ -1,9 +1,10 @@
 package org.example.service;
 
-import org.example.dto.PublicUidSearchResposeDto;
+import lombok.AllArgsConstructor;
+import org.example.dto.PublicUidSearchResponseDto;
 import org.example.dto.UserResponseDto;
 import org.example.entity.UserEntity;
-import org.example.exception.ForbiddenException;
+import org.example.exception.NotFoundException;
 import org.example.mapper.UserMapper;
 import org.example.repository.UserRepository;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -13,20 +14,15 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
+import java.util.Objects;
 import java.util.Optional;
 
 @Service
+@AllArgsConstructor
 public class UserService {
 
-    private final UserMapper mapper;
     private final UserRepository userRepository;
     private final UserMapper userMapper;
-
-    public UserService(UserMapper mapper, UserRepository userRepository, UserMapper userMapper) {
-        this.mapper = mapper;
-        this.userRepository = userRepository;
-        this.userMapper = userMapper;
-    }
 
     public UserEntity getCurrentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -47,10 +43,14 @@ public class UserService {
     @PreAuthorize("isAuthenticated()")
     public UserResponseDto getMe() {
         UserEntity user = getCurrentUser();
-        return mapper.toDto(user);
+        return userMapper.toDto(user);
     }
 
-    public PublicUidSearchResposeDto findUserByPublicUid(String publicUid){
+    public PublicUidSearchResponseDto findUserByPublicUid(String publicUid){
+
+        if(Objects.equals(publicUid, " ")) {
+            throw new IllegalArgumentException("PublicUid is empty");
+        }
 
         if(publicUid != null){
 
@@ -59,12 +59,12 @@ public class UserService {
 
             if(findUser.isPresent()){
                 UserEntity user = findUser.get();
-                return userMapper.searchToDto(user, publicUid);
+                return userMapper.searchToDto(user);
             } else {
-                throw new ForbiddenException("User not found");
+                throw new NotFoundException("User not found");
             }
         } else  {
-            throw new ForbiddenException("PublicUid is null");
+            throw new IllegalArgumentException("PublicUid is null");
         }
     }
 }

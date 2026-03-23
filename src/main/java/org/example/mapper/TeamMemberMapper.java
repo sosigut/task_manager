@@ -12,7 +12,7 @@ public class TeamMemberMapper {
         if(entity == null) return null;
 
         return TeamMemberResponseDto.builder()
-                .id(entity.getUser().getId())
+                .userId(entity.getUser().getId())
                 .publicUid(entity.getUser().getPublicUid())
                 .firstName(entity.getUser().getFirstName())
                 .lastName(entity.getUser().getLastName())

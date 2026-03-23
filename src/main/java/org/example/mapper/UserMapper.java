@@ -1,12 +1,10 @@
 package org.example.mapper;
 
-import org.example.dto.PublicUidSearchResposeDto;
+import org.example.dto.PublicUidSearchResponseDto;
 import org.example.dto.RegisterRequestDto;
 import org.example.dto.UserResponseDto;
 import org.example.entity.UserEntity;
 import org.springframework.stereotype.Component;
-
-import java.time.LocalDateTime;
 
 @Component
 public class UserMapper {
@@ -35,18 +33,18 @@ public class UserMapper {
                 .firstname(user.getFirstName())
                 .lastname(user.getLastName())
                 .role(user.getRole() != null ? user.getRole().name() : null)
-                .createdAt(LocalDateTime.now())
+                .createdAt(user.getCreatedAt())
                 .build();
     }
 
-    public PublicUidSearchResposeDto searchToDto(UserEntity user, String publicUid){
+    public PublicUidSearchResponseDto searchToDto(UserEntity user){
         if (user == null) {
             return null;
         }
 
-        return PublicUidSearchResposeDto.builder()
+        return PublicUidSearchResponseDto.builder()
                 .id(user.getId())
-                .publicUid(publicUid)
+                .publicUid(user.getPublicUid())
                 .firstName(user.getFirstName())
                 .lastName(user.getLastName())
                 .build();
