@@ -16,6 +16,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -34,10 +36,9 @@ public class TeamInvitationService {
 
         if(dto == null){
             throw new IllegalArgumentException("Arguments cannot be null");
-        } else {
-            if(dto.getInvitedUserId() == null || dto.getTeamId() == null){
-                throw new IllegalArgumentException("Arguments cannot be null");
-            }
+        }
+        if(dto.getInvitedUserId() == null || dto.getTeamId() == null){
+            throw new IllegalArgumentException("Arguments cannot be null");
         }
 
         UserEntity currentUser = userService.getCurrentUser();
@@ -79,6 +80,94 @@ public class TeamInvitationService {
                 .status(InvitationStatus.PENDING)
                 .createdAt(LocalDateTime.now())
                 .build();
+
+        TeamInvitationEntity save = teamInvitationRepository.save(invitation);
+
+        return teamInvitationMapper.toDto(save);
+
+    }
+
+    public List<TeamInvitationResponseDto> getMyInvitations(){
+
+        UserEntity currentUser = userService.getCurrentUser();
+
+        List<TeamInvitationEntity> invitations = teamInvitationRepository.findAllByInvitedUserId(currentUser.getId());
+
+        return invitations.stream().map(teamInvitationMapper::toDto).collect(Collectors.toList());
+    }
+
+    public List<TeamInvitationResponseDto> getMyPendingInvitations(){
+
+        UserEntity currentUser = userService.getCurrentUser();
+
+        List<TeamInvitationEntity> invitations = teamInvitationRepository.findAllByInvitedUserIdAndStatus(currentUser.getId(), InvitationStatus.PENDING);
+
+        return invitations.stream().map(teamInvitationMapper::toDto).collect(Collectors.toList());
+    }
+
+    @Transactional
+    public TeamInvitationResponseDto acceptInvitation(Long invitationId){
+
+        if(invitationId == null){
+            throw new IllegalArgumentException("Arguments cannot be null");
+        }
+
+        UserEntity currentUser = userService.getCurrentUser();
+
+        TeamInvitationEntity invitation = teamInvitationRepository.findById(invitationId)
+                .orElseThrow(() -> new NotFoundException("Invitation not found"));
+
+        if(!invitation.getInvitedUser().getId().equals(currentUser.getId())){
+            throw new ForbiddenException("You cannot accept this invitation");
+        }
+
+        if(!(invitation.getStatus() == InvitationStatus.PENDING)){
+            throw new IllegalArgumentException("The invitation has been invited");
+        }
+
+        boolean isAlreadyMember = teamMemberRepository
+                .existsByTeamIdAndUserId(invitation.getTeam().getId(), currentUser.getId());
+        if (isAlreadyMember) {
+            throw new IllegalArgumentException("User is already a member of the team");
+        }
+
+        TeamMemberEntity teamMember = TeamMemberEntity.builder()
+                .team(invitation.getTeam())
+                .user(currentUser)
+                .role(TeamRole.MEMBER)
+                .joinedAt(LocalDateTime.now())
+                .build();
+
+        TeamMemberEntity save = teamMemberRepository.save(teamMember);
+
+        invitation.setStatus(InvitationStatus.ACCEPTED);
+
+        TeamInvitationEntity saveInvitation = teamInvitationRepository.save(invitation);
+
+        return teamInvitationMapper.toDto(saveInvitation);
+    }
+
+    @Transactional
+    public TeamInvitationResponseDto declineInvitation(Long invitationId){
+
+        if(invitationId == null){
+            throw new IllegalArgumentException("Arguments cannot be null");
+        }
+
+        UserEntity currentUser = userService.getCurrentUser();
+
+        TeamInvitationEntity invitation = teamInvitationRepository.findById(invitationId)
+                .orElseThrow(() -> new NotFoundException("Invitation not found"));
+
+        if (!invitation.getInvitedUser().getId().equals(currentUser.getId())) {
+            throw new ForbiddenException("The invitation has been invited");
+        }
+
+        if(!(invitation.getStatus() == InvitationStatus.PENDING)){
+            throw new IllegalArgumentException("The invitation status is not PENDING");
+        }
+
+        invitation.setStatus(InvitationStatus.DECLINED);
 
         TeamInvitationEntity save = teamInvitationRepository.save(invitation);
 
