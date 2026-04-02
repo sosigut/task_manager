@@ -37,8 +37,5 @@ public class ProjectEntity implements KeysetEntity {
     private TeamEntity team;
 
     @Column(nullable = false)
-    private String teamName;
-
-    @Column(nullable = false)
     private LocalDateTime createdAt;
 }

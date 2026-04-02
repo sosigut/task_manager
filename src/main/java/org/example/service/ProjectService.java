@@ -87,7 +87,7 @@ public class ProjectService {
                 .register(this.meterRegistry);
     }
 
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("isAuthenticated()")
     public ProjectResponseDto createProject(CreateProjectRequestDto dto, Long teamId) {
 
         Timer.Sample sample = Timer.start(meterRegistry);
@@ -109,13 +109,13 @@ public class ProjectService {
             TeamMemberEntity membership = teamMemberRepository.findByTeamIdAndUserId(teamId, owner.getId())
                     .orElseThrow(() -> new NotFoundException("Team member not found"));
 
-            ProjectEntity project = projectMapper.toEntity(dto, owner, team);
-            ProjectEntity saved = projectRepository.save(project);
-
             Set<TeamRole> allowedRoles = Set.of(TeamRole.OWNER, TeamRole.MANAGER);
             if(!allowedRoles.contains(membership.getRole())){
                 throw new ForbiddenException("You don't have permission to create project. Required roles: " + allowedRoles);
             }
+
+            ProjectEntity project = projectMapper.toEntity(dto, owner, team);
+            ProjectEntity saved = projectRepository.save(project);
 
             cacheInvalidationService.evictProjectPagesByUserId(owner.getId());
             projectsCreatedCounter.increment();

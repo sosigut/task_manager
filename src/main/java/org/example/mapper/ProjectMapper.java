@@ -24,7 +24,6 @@ public class ProjectMapper {
                 .description(dto.getDescription().trim())
                 .owner(owner)
                 .team(team)
-                .teamName(team.getName())
                 .createdAt(LocalDateTime.now())
                 .build();
     }
