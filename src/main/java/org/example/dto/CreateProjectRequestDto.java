@@ -18,6 +18,8 @@ public class CreateProjectRequestDto {
     @Size(max = 1000)
     private String description;
 
+    private Long teamId;
+
 
 
 }

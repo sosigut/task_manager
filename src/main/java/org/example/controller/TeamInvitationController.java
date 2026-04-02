@@ -42,4 +42,9 @@ public class TeamInvitationController {
     public TeamInvitationResponseDto decline(@PathVariable Long id) {
         return teamInvitationService.declineInvitation(id);
     }
+
+    @PostMapping("{id}/cancel")
+    public TeamInvitationResponseDto cancel(@PathVariable Long id) {
+        return teamInvitationService.cancelInvitation(id);
+    }
 }

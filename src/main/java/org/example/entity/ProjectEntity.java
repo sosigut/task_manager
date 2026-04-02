@@ -32,6 +32,10 @@ public class ProjectEntity implements KeysetEntity {
     @JoinColumn(name = "owner_id", nullable = false)
     private UserEntity owner;
 
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "team_id", nullable = false)
+    private TeamEntity team;
+
     @Column(nullable = false)
     private LocalDateTime createdAt;
 }

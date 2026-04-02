@@ -16,7 +16,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -50,9 +53,9 @@ public class TeamInvitationService {
                 .findByTeamIdAndUserId(team.getId(), currentUser.getId())
                 .orElseThrow(() -> new ForbiddenException("The user is not a member of the team"));
 
-        TeamRole role = membership.getRole();
-        if(role == TeamRole.MEMBER){
-            throw new ForbiddenException("Team member can't invite members");
+        Set<TeamRole> allowedRoles = Set.of(TeamRole.OWNER, TeamRole.MANAGER);
+        if(!allowedRoles.contains(membership.getRole())){
+            throw new ForbiddenException("You don't have permission to invite members. Required roles: " + allowedRoles);
         }
 
         UserEntity invitedUser = userRepository.findById(dto.getInvitedUserId())
@@ -66,12 +69,7 @@ public class TeamInvitationService {
             throw new IllegalArgumentException("The invited user is already a member of the team");
         }
 
-        boolean alreadyInvited = teamInvitationRepository.existsByTeamIdAndInvitedUserIdAndStatus(
-                team.getId(), dto.getInvitedUserId(), InvitationStatus.PENDING
-        );
-        if (alreadyInvited) {
-            throw new IllegalArgumentException("User already has a pending invitation to this team");
-        }
+        checkInvitationSpamProtection(team, invitedUser);
 
         TeamInvitationEntity invitation = TeamInvitationEntity.builder()
                 .team(team)
@@ -87,6 +85,37 @@ public class TeamInvitationService {
 
     }
 
+    private void checkInvitationSpamProtection(TeamEntity team, UserEntity invitedUser){
+
+        final int COOLDOWN_MINUTES = 15;
+
+        Optional<TeamInvitationEntity> lastInvitation = teamInvitationRepository
+                .findTopByTeamIdAndInvitedUserIdOrderByCreatedAtDesc(
+                        team.getId(), invitedUser.getId()
+                );
+
+        if(lastInvitation.isPresent()){
+            TeamInvitationEntity lastInvitationEntity = lastInvitation.get();
+            LocalDateTime lastInvitationTime = lastInvitationEntity.getCreatedAt();
+            LocalDateTime now = LocalDateTime.now();
+
+            long minutesSinceLastInvite = ChronoUnit.MINUTES.between(lastInvitationTime, now);
+
+            if (lastInvitationEntity.getStatus() == InvitationStatus.PENDING) {
+                throw new IllegalArgumentException("User already has a pending invitation to this team");
+            }
+
+            if (minutesSinceLastInvite < COOLDOWN_MINUTES) {
+                throw new IllegalArgumentException(
+                        String.format("You can invite this user again after %d minutes. " +
+                                        "Last invitation was %d minutes ago (status: %s)",
+                                COOLDOWN_MINUTES, minutesSinceLastInvite, lastInvitationEntity.getStatus())
+                );
+            }
+        }
+    }
+
+    @PreAuthorize("isAuthenticated()")
     public List<TeamInvitationResponseDto> getMyInvitations(){
 
         UserEntity currentUser = userService.getCurrentUser();
@@ -96,6 +125,7 @@ public class TeamInvitationService {
         return invitations.stream().map(teamInvitationMapper::toDto).collect(Collectors.toList());
     }
 
+    @PreAuthorize("isAuthenticated()")
     public List<TeamInvitationResponseDto> getMyPendingInvitations(){
 
         UserEntity currentUser = userService.getCurrentUser();
@@ -106,6 +136,7 @@ public class TeamInvitationService {
     }
 
     @Transactional
+    @PreAuthorize("isAuthenticated()")
     public TeamInvitationResponseDto acceptInvitation(Long invitationId){
 
         if(invitationId == null){
@@ -122,7 +153,7 @@ public class TeamInvitationService {
         }
 
         if(!(invitation.getStatus() == InvitationStatus.PENDING)){
-            throw new IllegalArgumentException("The invitation has been invited");
+            throw new IllegalArgumentException("invitation is not pending");
         }
 
         boolean isAlreadyMember = teamMemberRepository
@@ -138,7 +169,7 @@ public class TeamInvitationService {
                 .joinedAt(LocalDateTime.now())
                 .build();
 
-        TeamMemberEntity save = teamMemberRepository.save(teamMember);
+        teamMemberRepository.save(teamMember);
 
         invitation.setStatus(InvitationStatus.ACCEPTED);
 
@@ -148,6 +179,7 @@ public class TeamInvitationService {
     }
 
     @Transactional
+    @PreAuthorize("isAuthenticated()")
     public TeamInvitationResponseDto declineInvitation(Long invitationId){
 
         if(invitationId == null){
@@ -160,7 +192,7 @@ public class TeamInvitationService {
                 .orElseThrow(() -> new NotFoundException("Invitation not found"));
 
         if (!invitation.getInvitedUser().getId().equals(currentUser.getId())) {
-            throw new ForbiddenException("The invitation has been invited");
+            throw new ForbiddenException("This invitation does not belong to you");
         }
 
         if(!(invitation.getStatus() == InvitationStatus.PENDING)){
@@ -173,6 +205,33 @@ public class TeamInvitationService {
 
         return teamInvitationMapper.toDto(save);
 
+    }
+
+    @Transactional
+    @PreAuthorize("isAuthenticated()")
+    public TeamInvitationResponseDto cancelInvitation(Long invitationId){
+
+        if(invitationId == null){
+            throw new IllegalArgumentException("Arguments cannot be null");
+        }
+
+        UserEntity currentUser = userService.getCurrentUser();
+
+        TeamInvitationEntity invitation = teamInvitationRepository.findById(invitationId)
+                .orElseThrow(() -> new NotFoundException("Invitation not found"));
+
+        if(currentUser.getId().equals(invitation.getInvitedBy().getId())) {
+            throw new ForbiddenException("You cannot cancel this invitation");
+        }
+
+        if(invitation.getStatus() != InvitationStatus.PENDING){
+            throw new IllegalArgumentException("invitation is not pending");
+        }
+
+        invitation.setStatus(InvitationStatus.CANCELLED);
+        TeamInvitationEntity save = teamInvitationRepository.save(invitation);
+
+        return teamInvitationMapper.toDto(save);
     }
 
 }

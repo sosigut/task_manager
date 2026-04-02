@@ -10,16 +10,12 @@ import java.util.Optional;
 public interface TeamInvitationRepository extends JpaRepository<TeamInvitationEntity,Long> {
     boolean existsByTeamIdAndInvitedUserIdAndStatus(Long teamId, Long invitedUserId, InvitationStatus status);
 
-    Optional<TeamInvitationEntity> findByTeamIdAndInvitedUserIdAndStatus(
-            Long teamId,
-            Long invitedUserId,
-            InvitationStatus status
-    );
-
     List<TeamInvitationEntity> findAllByInvitedUserId(Long invitedUserId);
 
     List<TeamInvitationEntity> findAllByInvitedUserIdAndStatus(
             Long invitedUserId,
             InvitationStatus status
     );
+
+    Optional<TeamInvitationEntity> findTopByTeamIdAndInvitedUserIdOrderByCreatedAtDesc(Long teamId, Long invitedUserId);
 }
