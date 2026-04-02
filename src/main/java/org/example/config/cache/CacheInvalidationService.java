@@ -44,6 +44,7 @@ public class CacheInvalidationService {
     private void deleteByScan(String pattern) {
         List<String> keysToDelete = new ArrayList<>();
 
+        assert redis.getConnectionFactory() != null;
         try (var connection = redis.getConnectionFactory().getConnection()){
 
             ScanOptions options = ScanOptions.scanOptions()

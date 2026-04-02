@@ -21,6 +21,10 @@ public class ProjectResponseDto {
 
     private Long ownerId;
 
+    private Long teamId;
+
+    private String teamName;
+
     private LocalDateTime createdAt;
 
 }

@@ -9,17 +9,12 @@ import org.example.config.cache.CacheInvalidationService;
 import org.example.dto.CreateProjectRequestDto;
 import org.example.dto.ProjectResponseDto;
 import org.example.dto.UpdateProjectRequestDto;
-import org.example.entity.ProjectEntity;
-import org.example.entity.Role;
-import org.example.entity.UserEntity;
+import org.example.entity.*;
 import org.example.exception.ForbiddenException;
 import org.example.exception.NotFoundException;
 import org.example.mapper.ProjectMapper;
 import org.example.pagination.*;
-import org.example.repository.CommentRepository;
-import org.example.repository.ProjectRepository;
-import org.example.repository.TaskHistoryRepository;
-import org.example.repository.TaskRepository;
+import org.example.repository.*;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
@@ -29,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -45,6 +41,8 @@ public class ProjectService {
     private final CommentRepository commentRepository;
     private final TaskHistoryRepository taskHistoryRepository;
     private final MeterRegistry meterRegistry;
+    private final TeamRepository teamRepository;
+    private final TeamMemberRepository teamMemberRepository;
 
     private Counter projectsCreatedCounter;
     private Counter projectsDeletedCounter;
@@ -90,14 +88,34 @@ public class ProjectService {
     }
 
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
-    public ProjectResponseDto createProject(CreateProjectRequestDto dto) {
+    public ProjectResponseDto createProject(CreateProjectRequestDto dto, Long teamId) {
 
         Timer.Sample sample = Timer.start(meterRegistry);
 
+        if (teamId == null) {
+            throw new IllegalArgumentException("Team ID is required");
+        }
+
+        if(dto == null){
+            throw new IllegalArgumentException("Create project request DTO is required");
+        }
+
         try {
             UserEntity owner = userService.getCurrentUser();
-            ProjectEntity project = projectMapper.toEntity(dto, owner);
+
+            TeamEntity team = teamRepository.findById(teamId)
+                    .orElseThrow(() -> new NotFoundException("Team not found"));
+
+            TeamMemberEntity membership = teamMemberRepository.findByTeamIdAndUserId(teamId, owner.getId())
+                    .orElseThrow(() -> new NotFoundException("Team member not found"));
+
+            ProjectEntity project = projectMapper.toEntity(dto, owner, team);
             ProjectEntity saved = projectRepository.save(project);
+
+            Set<TeamRole> allowedRoles = Set.of(TeamRole.OWNER, TeamRole.MANAGER);
+            if(!allowedRoles.contains(membership.getRole())){
+                throw new ForbiddenException("You don't have permission to create project. Required roles: " + allowedRoles);
+            }
 
             cacheInvalidationService.evictProjectPagesByUserId(owner.getId());
             projectsCreatedCounter.increment();
