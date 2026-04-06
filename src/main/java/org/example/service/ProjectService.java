@@ -23,12 +23,17 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class ProjectService {
+
+    Set<TeamRole> ALLOWED_ROLES = Set.of(TeamRole.OWNER, TeamRole.MANAGER);
 
     private final ProjectMapper projectMapper;
     private final UserService userService;
@@ -107,7 +112,7 @@ public class ProjectService {
                     .orElseThrow(() -> new NotFoundException("Team not found"));
 
             TeamMemberEntity membership = teamMemberRepository.findByTeamIdAndUserId(teamId, owner.getId())
-                    .orElseThrow(() -> new NotFoundException("Team member not found"));
+                    .orElseThrow(() -> new ForbiddenException("Team member not found"));
 
             Set<TeamRole> allowedRoles = Set.of(TeamRole.OWNER, TeamRole.MANAGER);
             if(!allowedRoles.contains(membership.getRole())){
@@ -117,7 +122,7 @@ public class ProjectService {
             ProjectEntity project = projectMapper.toEntity(dto, owner, team);
             ProjectEntity saved = projectRepository.save(project);
 
-            cacheInvalidationService.evictProjectPagesByUserId(owner.getId());
+            cacheInvalidationService.evictProjectPagesForAllTeamMembers(team.getId());
             projectsCreatedCounter.increment();
 
             return projectMapper.toDto(saved);
@@ -129,7 +134,7 @@ public class ProjectService {
     @Cacheable(value = "projectPages",
             keyGenerator = "universalKeyGenerator")
     @PreAuthorize("isAuthenticated()")
-    public KeysetPageResponseDto<ProjectResponseDto> getKeysetMyProjects(Integer limit,
+    public KeysetPageResponseDto<ProjectResponseDto> getMyTeamProjects(Integer limit,
                                                LocalDateTime cursorCreatedAt,
                                                Long cursorId) {
 
@@ -140,13 +145,30 @@ public class ProjectService {
             int pageSize = keysetPaginationUtils.normalizeLimit(limit);
             Pageable pageable = keysetPaginationUtils.createPageable(pageSize);
 
-            UserEntity owner = userService.getCurrentUser();
+            UserEntity currentUser = userService.getCurrentUser();
+
+            List<TeamMemberEntity> memberships = teamMemberRepository
+                    .findAllByUserId(currentUser.getId());
+
+            List<Long> teamIds = memberships.stream()
+                    .map(membership -> membership.getTeam().getId())
+                    .collect(Collectors.toList());
+
+            if(teamIds.isEmpty()){
+                return new KeysetPageResponseDto<>(
+                        Collections.emptyList(),
+                        pageSize,
+                        null,
+                        null,
+                        false
+                );
+            }
 
             Slice<ProjectEntity> slice = keysetPaginationFetcher.fetchSlice(
                     mode,
-                    () -> projectRepository.findFirstPageByCreatedAtAndOwnerIdDesc(owner.getId(), pageable),
-                    (createdAt, id) -> projectRepository.findNextPageByCreatedAtAndOwnerIdAfterCursor(
-                            owner.getId(), createdAt, id, pageable
+                    () -> projectRepository.findFirstPageByCreatedAtAndTeamIdsDesc(teamIds, pageable),
+                    (createdAt, id) -> projectRepository.findNextPageByCreatedAtAndTeamIdsAfterCursor(
+                            teamIds, createdAt, id, pageable
                     ),
                     cursorCreatedAt,
                     cursorId
@@ -166,6 +188,22 @@ public class ProjectService {
         }
     }
 
+    public void checkMembershipRole(TeamEntity team, UserEntity currentUser) {
+        Optional<TeamMemberEntity> findMembership = teamMemberRepository.findByTeamIdAndUserId(
+                team.getId(), currentUser.getId()
+        );
+
+        if(findMembership.isEmpty()) {
+            throw new ForbiddenException("User is not a member of this team");
+        }
+
+        TeamMemberEntity membership = findMembership.get();
+
+        if(!ALLOWED_ROLES.contains(membership.getRole())){
+            throw new ForbiddenException("Недостаточно прав. Required roles: " + ALLOWED_ROLES);
+        }
+    }
+
     @Transactional
     @PreAuthorize("isAuthenticated()")
     public void deleteProject(Long projectId) {
@@ -177,9 +215,10 @@ public class ProjectService {
                     .orElseThrow(() -> new NotFoundException("Project not found"));
 
             UserEntity currentUser = userService.getCurrentUser();
-            if (!isFlag(currentUser)) {
-                throw new ForbiddenException("Недостаточно прав");
-            }
+
+            TeamEntity team = projectEntity.getTeam();
+
+            checkMembershipRole(team, currentUser);
 
             List<Long> taskIds = taskRepository.findTaskIdsByProject_Id(projectEntity.getId());
 
@@ -194,15 +233,11 @@ public class ProjectService {
             cacheInvalidationService.evictTaskPagesByProjectId(projectEntity.getId());
             projectRepository.delete(projectEntity);
 
-            cacheInvalidationService.evictProjectPagesByUserId(projectEntity.getOwner().getId());
+            cacheInvalidationService.evictProjectPagesForAllTeamMembers(team.getId());
             projectsDeletedCounter.increment();
         } finally {
             sample.stop(projectDeletedTimer);
         }
-    }
-
-    private static boolean isFlag(UserEntity currentUser) {
-        return currentUser.getRole() == Role.ADMIN || currentUser.getRole() == Role.MANAGER;
     }
 
     @Transactional
@@ -216,9 +251,9 @@ public class ProjectService {
                     .orElseThrow(() -> new NotFoundException("Project not found"));
             UserEntity currentUser = userService.getCurrentUser();
 
-            if(!isFlag(currentUser)) {
-                throw new ForbiddenException("Недостаточно прав");
-            }
+            TeamEntity team = project.getTeam();
+
+            checkMembershipRole(team, currentUser);
 
             if(dto.getDescription() == null && dto.getName() == null) {
                 throw new IllegalArgumentException("Нет полей для обновления");
@@ -255,7 +290,7 @@ public class ProjectService {
             }
 
             ProjectEntity saveProject = projectRepository.save(project);
-            cacheInvalidationService.evictProjectPagesByUserId(project.getOwner().getId());
+            cacheInvalidationService.evictProjectPagesForAllTeamMembers(team.getId());
 
             return projectMapper.toDto(saveProject);
         } finally {

@@ -1,6 +1,8 @@
 package org.example.config.cache;
 
 import lombok.AllArgsConstructor;
+import org.example.entity.TeamMemberEntity;
+import org.example.repository.TeamMemberRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.Cursor;
@@ -11,6 +13,7 @@ import org.springframework.stereotype.Service;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @AllArgsConstructor
@@ -18,6 +21,8 @@ public class CacheInvalidationService {
 
     private final StringRedisTemplate redis;
     private static final Logger log = LoggerFactory.getLogger(CacheInvalidationService.class);
+
+    private final TeamMemberRepository teamMemberRepository;
 
 
     public void evictTaskPagesByProjectId(Long projectId) {
@@ -39,6 +44,29 @@ public class CacheInvalidationService {
         String pattern = "projectPages::*" + marker + "*";
 
         deleteByScan(pattern);
+    }
+
+    public void evictProjectPagesForAllTeamMembers(Long teamId){
+
+        List<TeamMemberEntity> teamMembers = teamMemberRepository.findAllByTeamId(teamId);
+
+        if (teamMembers.isEmpty()) {
+            log.info("No members found for team: {}. Skipping cache invalidation.", teamId);
+            return;
+        }
+
+        List<Long> userIds = teamMembers.stream()
+                .map(member -> member.getUser().getId())
+                .toList();
+
+        log.info("Found {} unique user(s) in team: {}. Invalidating caches...", userIds.size(), teamId);
+
+        for(Long userId : userIds){
+            evictProjectPagesByUserId(userId);
+        }
+
+        log.info("Completed cache invalidation for team: {}. Invalidated {} user caches.", teamId, userIds.size());
+
     }
 
     private void deleteByScan(String pattern) {

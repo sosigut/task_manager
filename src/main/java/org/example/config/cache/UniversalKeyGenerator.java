@@ -89,7 +89,7 @@ public class UniversalKeyGenerator implements KeyGenerator{
                         scope, taskId, limit, cursorPart);
 
             }
-            case "getKeysetMyProjects" -> {
+            case "getMyTeamProjects" -> {
 
                 limit = normalizeGenerateLimit((Integer) params[0]);
                 LocalDateTime cursorCreatedAt = (LocalDateTime) params[1];

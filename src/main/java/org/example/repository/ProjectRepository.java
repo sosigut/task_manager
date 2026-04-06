@@ -14,23 +14,25 @@ public interface ProjectRepository extends JpaRepository<ProjectEntity, Long> {
 
     @Query("""
         select project from ProjectEntity project
-        where project.owner.id = :ownerId
+        where project.team.id in :teamIds
         order by project.createdAt desc, project.id desc
     """)
-    public Slice<ProjectEntity> findFirstPageByCreatedAtAndOwnerIdDesc(@Param("ownerId") Long ownerId,
+    public Slice<ProjectEntity> findFirstPageByCreatedAtAndTeamIdsDesc(@Param("teamIds") List<Long> teamIds,
                                                                        Pageable pageable);
 
     @Query("""
         select project from ProjectEntity project
-        where project.owner.id = :ownerId
+        where project.team.id in :teamIds
           and (
               project.createdAt < :cursorCreatedAt
               or (project.createdAt = :cursorCreatedAt and project.id < :cursorId)
           )
         order by project.createdAt desc, project.id desc
     """)
-    public Slice<ProjectEntity> findNextPageByCreatedAtAndOwnerIdAfterCursor(@Param("ownerId") Long ownerId,
-                                                                             @Param("cursorCreatedAt") LocalDateTime cursorCreatedAt,
-                                                                             @Param("cursorId") Long cursorId,
-                                                                             Pageable pageable);
+    public Slice<ProjectEntity> findNextPageByCreatedAtAndTeamIdsAfterCursor(
+            @Param("teamIds") List<Long> teamIds,
+            @Param("cursorCreatedAt") LocalDateTime cursorCreatedAt,
+            @Param("cursorId") Long cursorId,
+            Pageable pageable
+    );
 }
