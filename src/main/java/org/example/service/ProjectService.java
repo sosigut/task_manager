@@ -33,8 +33,6 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ProjectService {
 
-    Set<TeamRole> ALLOWED_ROLES = Set.of(TeamRole.OWNER, TeamRole.MANAGER);
-
     private final ProjectMapper projectMapper;
     private final UserService userService;
     private final ProjectRepository projectRepository;
@@ -111,13 +109,9 @@ public class ProjectService {
             TeamEntity team = teamRepository.findById(teamId)
                     .orElseThrow(() -> new NotFoundException("Team not found"));
 
-            TeamMemberEntity membership = teamMemberRepository.findByTeamIdAndUserId(teamId, owner.getId())
-                    .orElseThrow(() -> new ForbiddenException("Team member not found"));
-
             Set<TeamRole> allowedRoles = Set.of(TeamRole.OWNER, TeamRole.MANAGER);
-            if(!allowedRoles.contains(membership.getRole())){
-                throw new ForbiddenException("You don't have permission to create project. Required roles: " + allowedRoles);
-            }
+
+            checkMembershipRole(team, owner, allowedRoles);
 
             ProjectEntity project = projectMapper.toEntity(dto, owner, team);
             ProjectEntity saved = projectRepository.save(project);
@@ -188,7 +182,7 @@ public class ProjectService {
         }
     }
 
-    public void checkMembershipRole(TeamEntity team, UserEntity currentUser) {
+    public void checkMembershipRole(TeamEntity team, UserEntity currentUser, Set<TeamRole> allowedRoles) {
         Optional<TeamMemberEntity> findMembership = teamMemberRepository.findByTeamIdAndUserId(
                 team.getId(), currentUser.getId()
         );
@@ -199,8 +193,8 @@ public class ProjectService {
 
         TeamMemberEntity membership = findMembership.get();
 
-        if(!ALLOWED_ROLES.contains(membership.getRole())){
-            throw new ForbiddenException("Недостаточно прав. Required roles: " + ALLOWED_ROLES);
+        if(!allowedRoles.contains(membership.getRole())){
+            throw new ForbiddenException("Недостаточно прав. Required roles: " + allowedRoles);
         }
     }
 
@@ -218,7 +212,9 @@ public class ProjectService {
 
             TeamEntity team = projectEntity.getTeam();
 
-            checkMembershipRole(team, currentUser);
+            Set<TeamRole> allowedRoles = Set.of(TeamRole.OWNER, TeamRole.MANAGER);
+
+            checkMembershipRole(team, currentUser, allowedRoles);
 
             List<Long> taskIds = taskRepository.findTaskIdsByProject_Id(projectEntity.getId());
 
@@ -253,7 +249,9 @@ public class ProjectService {
 
             TeamEntity team = project.getTeam();
 
-            checkMembershipRole(team, currentUser);
+            Set<TeamRole> allowedRoles = Set.of(TeamRole.OWNER, TeamRole.MANAGER);
+
+            checkMembershipRole(team, currentUser, allowedRoles);
 
             if(dto.getDescription() == null && dto.getName() == null) {
                 throw new IllegalArgumentException("Нет полей для обновления");

@@ -26,8 +26,6 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class TeamInvitationService {
 
-    Set<TeamRole> ALLOWED_ROLES = Set.of(TeamRole.OWNER, TeamRole.MANAGER);
-
     private final TeamInvitationRepository teamInvitationRepository;
     private final TeamMemberRepository teamMemberRepository;
     private final TeamRepository teamRepository;
@@ -55,8 +53,9 @@ public class TeamInvitationService {
                 .findByTeamIdAndUserId(team.getId(), currentUser.getId())
                 .orElseThrow(() -> new ForbiddenException("The user is not a member of the team"));
 
-        if(!ALLOWED_ROLES.contains(membership.getRole())){
-            throw new ForbiddenException("You don't have permission to invite members. Required roles: " + ALLOWED_ROLES);
+        Set<TeamRole> allowedRoles = Set.of(TeamRole.OWNER, TeamRole.MANAGER);
+        if(!allowedRoles.contains(membership.getRole())){
+            throw new ForbiddenException("You don't have permission to invite members. Required roles: " + allowedRoles);
         }
 
         UserEntity invitedUser = userRepository.findById(dto.getInvitedUserId())
