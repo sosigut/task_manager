@@ -50,6 +50,7 @@ public class TaskService {
     private final KeysetPaginationFetcher keysetPaginationFetcher;
     private final CacheInvalidationService cacheInvalidationService;
     private final MeterRegistry meterRegistry;
+    private final TeamAccessService teamAccessService;
 
     private Counter tasksCreatedCounter;
     private Counter tasksDeletedCounter;
@@ -115,17 +116,35 @@ public class TaskService {
 
     }
 
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @Transactional
+    @PreAuthorize("isAuthenticated()")
     public TaskResponseDto createTask(Long projectId, CreateTaskRequestDto dto) {
 
         Timer.Sample sample = Timer.start(meterRegistry);
 
         try {
+            if (projectId == null) {
+                throw new IllegalArgumentException("Project ID is required");
+            }
+
+            if (dto == null) {
+                throw new IllegalArgumentException("Create task request DTO is required");
+            }
+
             ProjectEntity project = projectRepository.findById(projectId)
                     .orElseThrow(() -> new NotFoundException("Project not found"));
 
             UserEntity assignee = userRepository.findById(dto.getAssigneeId())
                     .orElseThrow(() -> new NotFoundException("Assignee not found"));
+
+            UserEntity currentUser = userService.getCurrentUser();
+
+            TeamEntity team = project.getTeam();
+
+            Set<TeamRole> allowedRoles = Set.of(TeamRole.OWNER, TeamRole.MANAGER);
+
+            teamAccessService.checkMembershipRole(team, currentUser, allowedRoles);
+            teamAccessService.checkMembership(team, assignee); // assignee тоже должен быть в команде
 
             TaskEntity task = taskMapper.toEntity(dto, project, assignee);
 
@@ -139,7 +158,6 @@ public class TaskService {
         } finally {
             sample.stop(taskCreatedTimer);
         }
-
     }
 
     private Counter getStatusChangeCounter(Status from, Status to) {
@@ -154,38 +172,42 @@ public class TaskService {
         );
     }
 
+    @Transactional
     @PreAuthorize("isAuthenticated()")
     public TaskResponseDto changeStatus(Long id, Status newStatus) {
 
         Timer.Sample sample = Timer.start(meterRegistry);
 
-        try{
+        try {
             UserEntity currentUser = userService.getCurrentUser();
 
             TaskEntity task = taskRepository.findById(id)
                     .orElseThrow(() -> new NotFoundException("Task not found"));
 
+            TeamEntity team = task.getProject().getTeam();
+
+            TeamMemberEntity membership = teamAccessService.checkMembership(team, currentUser);
+
             Status oldStatus = task.getStatus();
 
-            if(currentUser.getRole() == Role.USER &&
+            if (membership.getRole() == TeamRole.MEMBER &&
                     !currentUser.getId().equals(task.getAssignee().getId())) {
                 throw new ForbiddenException("Только исполнитель задачи может изменить ее статус");
             }
 
-            if(currentUser.getRole() == Role.USER && newStatus == Status.DONE){
+            if (membership.getRole() == TeamRole.MEMBER && newStatus == Status.DONE) {
                 throw new ForbiddenException("Недостаточно прав доступа");
             }
 
-            if(currentUser.getRole() == Role.USER){
+            if (membership.getRole() == TeamRole.MEMBER) {
                 Set<Status> allowedNewStatuses = ALLOWED_TRANSITIONS.get(oldStatus);
 
-                if(allowedNewStatuses == null || !allowedNewStatuses.contains(newStatus)){
+                if (allowedNewStatuses == null || !allowedNewStatuses.contains(newStatus)) {
                     throw new ForbiddenException(String.format("Недопустимый переход статуса: %s -> %s.", oldStatus, newStatus));
                 }
             }
 
             task.setStatus(newStatus);
-
             taskRepository.save(task);
 
             cacheInvalidationService.evictTaskPagesByProjectId(task.getProject().getId());
@@ -233,10 +255,14 @@ public class TaskService {
             ProjectEntity project = projectRepository.findById(projectId)
                     .orElseThrow(() -> new NotFoundException("Project not found"));
 
-            boolean isAdminOrManager = currentUser.getRole() == Role.ADMIN ||
-                    currentUser.getRole() == Role.MANAGER;
+            TeamEntity team = project.getTeam();
 
-            if (isAdminOrManager) {
+            TeamMemberEntity membership = teamAccessService.checkMembership(team, currentUser);
+
+            boolean isOwnerOrManager = membership.getRole() == TeamRole.OWNER ||
+                    membership.getRole() == TeamRole.MANAGER;
+
+            if (isOwnerOrManager) {
                 firstPageSupplier = () -> taskRepository.findFirstPageByProjectId(project.getId(), pageable);
                 nextPageSupplier = (createdAt, id) ->
                         taskRepository.findNextByProjectIdAfterCursor(project.getId(), createdAt, id, pageable);
@@ -257,10 +283,7 @@ public class TaskService {
             );
 
             KeysetSliceResult<TaskEntity> sliceResult =
-                    keysetPaginationUtils.trim(
-                            slice,
-                            pageSize
-                    );
+                    keysetPaginationUtils.trim(slice, pageSize);
 
             return pageBuilder.universalBuilder(
                     sliceResult,
@@ -278,16 +301,17 @@ public class TaskService {
 
         Timer.Sample sample = Timer.start(meterRegistry);
 
-        try{
-            TaskEntity task = taskRepository.findById(taskId).orElseThrow(() -> new NotFoundException("Task not found"));
+        try {
+            TaskEntity task = taskRepository.findById(taskId)
+                    .orElseThrow(() -> new NotFoundException("Task not found"));
+
+            TeamEntity team = task.getProject().getTeam();
 
             UserEntity currentUser = userService.getCurrentUser();
 
-            boolean flag = isFlag(currentUser);
+            Set<TeamRole> allowedRoles = Set.of(TeamRole.OWNER, TeamRole.MANAGER);
 
-            if(!flag){
-                throw new ForbiddenException("Недостаточно прав");
-            }
+            teamAccessService.checkMembershipRole(team, currentUser, allowedRoles);
 
             commentRepository.deleteByTask_Id(taskId);
             taskHistoryRepository.deleteByTask_Id(taskId);
@@ -300,10 +324,6 @@ public class TaskService {
         }
     }
 
-    private static boolean isFlag(UserEntity currentUser){
-        return currentUser.getRole() == Role.ADMIN || currentUser.getRole() == Role.MANAGER;
-    }
-
     @PreAuthorize("isAuthenticated()")
     public List<TaskHistoryResponseDto> getTaskHistory(Long taskId) {
 
@@ -312,10 +332,14 @@ public class TaskService {
         try {
             UserEntity currentUser = userService.getCurrentUser();
 
-            TaskEntity task =  taskRepository.findById(taskId)
+            TaskEntity task = taskRepository.findById(taskId)
                     .orElseThrow(() -> new NotFoundException("Task not found"));
 
-            if(currentUser.getRole() == Role.USER
+            TeamEntity team = task.getProject().getTeam();
+
+            TeamMemberEntity membership = teamAccessService.checkMembership(team, currentUser);
+
+            if (membership.getRole() == TeamRole.MEMBER
                     && !currentUser.getId().equals(task.getAssignee().getId())) {
                 throw new ForbiddenException("Недостаточно прав доступа");
             }
@@ -330,58 +354,55 @@ public class TaskService {
     }
 
     @Transactional
-    public TaskResponseDto updateTask(UpdateTaskRequestDto dto,  Long taskId) {
+    @PreAuthorize("isAuthenticated()")
+    public TaskResponseDto updateTask(UpdateTaskRequestDto dto, Long taskId) {
 
         Timer.Sample sample = Timer.start(meterRegistry);
 
-        try{
-
+        try {
             TaskEntity task = taskRepository.findById(taskId)
                     .orElseThrow(() -> new NotFoundException("Task not found"));
+
             UserEntity currentUser = userService.getCurrentUser();
 
-            if(!isFlag(currentUser)){
-                throw new ForbiddenException("Недостаточно прав");
-            }
+            ProjectEntity project = task.getProject();
+            TeamEntity team = project.getTeam();
 
-            if(dto.getAssigneeId() == null && dto.getDescription() == null && dto.getTitle() == null){
+            Set<TeamRole> allowedRoles = Set.of(TeamRole.OWNER, TeamRole.MANAGER);
+
+            teamAccessService.checkMembershipRole(team, currentUser, allowedRoles);
+
+            if (dto.getAssigneeId() == null && dto.getDescription() == null && dto.getTitle() == null) {
                 throw new IllegalArgumentException("Нет полей для обновления");
             }
 
-            if(dto.getTitle() != null){
-
+            if (dto.getTitle() != null) {
                 String trimmedTitle = dto.getTitle().trim();
-
-                if(trimmedTitle.isEmpty()){
+                if (trimmedTitle.isEmpty()) {
                     throw new IllegalArgumentException("Название задачи не должно быть пустым");
                 }
-
-                if(trimmedTitle.length() > 200){
+                if (trimmedTitle.length() > 200) {
                     throw new IllegalArgumentException("Название задачи не должно быть больше 200 знаков");
                 }
-
                 task.setTitle(trimmedTitle);
             }
 
-            if(dto.getDescription() != null){
-
+            if (dto.getDescription() != null) {
                 String trimmedDescription = dto.getDescription().trim();
-
-                if(trimmedDescription.isEmpty()){
+                if (trimmedDescription.isEmpty()) {
                     throw new IllegalArgumentException("Описание задачи не должно быть пустым");
                 }
-
-                if(trimmedDescription.length() > 5000){
+                if (trimmedDescription.length() > 5000) {
                     throw new IllegalArgumentException("Описание задачи не должно быть больше 5000 знаков");
                 }
-
                 task.setDescription(trimmedDescription);
             }
 
-            if(dto.getAssigneeId() != null){
-
+            if (dto.getAssigneeId() != null) {
                 UserEntity assignee = userRepository.findById(dto.getAssigneeId())
                         .orElseThrow(() -> new NotFoundException("Исполнитель задачи не найден"));
+
+                teamAccessService.checkMembership(team, assignee);
 
                 task.setAssignee(assignee);
             }

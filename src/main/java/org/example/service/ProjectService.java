@@ -10,7 +10,6 @@ import org.example.dto.CreateProjectRequestDto;
 import org.example.dto.ProjectResponseDto;
 import org.example.dto.UpdateProjectRequestDto;
 import org.example.entity.*;
-import org.example.exception.ForbiddenException;
 import org.example.exception.NotFoundException;
 import org.example.mapper.ProjectMapper;
 import org.example.pagination.*;
@@ -25,7 +24,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -35,6 +33,7 @@ public class ProjectService {
 
     private final ProjectMapper projectMapper;
     private final UserService userService;
+    private final TeamAccessService teamAccessService;
     private final ProjectRepository projectRepository;
     private final KeysetPageBuilder keysetPageBuilder;
     private final KeysetPaginationUtils keysetPaginationUtils;
@@ -111,7 +110,7 @@ public class ProjectService {
 
             Set<TeamRole> allowedRoles = Set.of(TeamRole.OWNER, TeamRole.MANAGER);
 
-            checkMembershipRole(team, owner, allowedRoles);
+            teamAccessService.checkMembershipRole(team, owner, allowedRoles);
 
             ProjectEntity project = projectMapper.toEntity(dto, owner, team);
             ProjectEntity saved = projectRepository.save(project);
@@ -182,22 +181,6 @@ public class ProjectService {
         }
     }
 
-    public void checkMembershipRole(TeamEntity team, UserEntity currentUser, Set<TeamRole> allowedRoles) {
-        Optional<TeamMemberEntity> findMembership = teamMemberRepository.findByTeamIdAndUserId(
-                team.getId(), currentUser.getId()
-        );
-
-        if(findMembership.isEmpty()) {
-            throw new ForbiddenException("User is not a member of this team");
-        }
-
-        TeamMemberEntity membership = findMembership.get();
-
-        if(!allowedRoles.contains(membership.getRole())){
-            throw new ForbiddenException("Недостаточно прав. Required roles: " + allowedRoles);
-        }
-    }
-
     @Transactional
     @PreAuthorize("isAuthenticated()")
     public void deleteProject(Long projectId) {
@@ -214,7 +197,7 @@ public class ProjectService {
 
             Set<TeamRole> allowedRoles = Set.of(TeamRole.OWNER, TeamRole.MANAGER);
 
-            checkMembershipRole(team, currentUser, allowedRoles);
+            teamAccessService.checkMembershipRole(team, currentUser, allowedRoles);
 
             List<Long> taskIds = taskRepository.findTaskIdsByProject_Id(projectEntity.getId());
 
@@ -251,7 +234,7 @@ public class ProjectService {
 
             Set<TeamRole> allowedRoles = Set.of(TeamRole.OWNER, TeamRole.MANAGER);
 
-            checkMembershipRole(team, currentUser, allowedRoles);
+            teamAccessService.checkMembershipRole(team, currentUser, allowedRoles);
 
             if(dto.getDescription() == null && dto.getName() == null) {
                 throw new IllegalArgumentException("Нет полей для обновления");
