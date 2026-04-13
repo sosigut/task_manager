@@ -19,9 +19,10 @@ public class ProjectController {
 
     private final ProjectService projectService;
 
-    @PostMapping
-    public ProjectResponseDto createProject(@Valid @RequestBody CreateProjectRequestDto dto) {
-        return projectService.createProject(dto);
+    @PostMapping("/team/{teamId}")
+    public ProjectResponseDto createProject(@Valid @RequestBody CreateProjectRequestDto dto,
+                                            @PathVariable Long teamId) {
+        return projectService.createProject(dto, teamId);
     }
 
     @GetMapping("/my")
@@ -29,7 +30,7 @@ public class ProjectController {
             @RequestParam(required = false) Integer limit,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime cursorCreatedAt,
             @RequestParam(required = false) Long cursorId) {
-        return projectService.getKeysetMyProjects(limit, cursorCreatedAt, cursorId);
+        return projectService.getMyTeamProjects(limit, cursorCreatedAt, cursorId);
     }
 
     @DeleteMapping("/{projectId}")

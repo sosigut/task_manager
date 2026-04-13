@@ -1,7 +1,10 @@
 package org.example.config.cache;
 
 import lombok.AllArgsConstructor;
+import org.example.entity.ProjectEntity;
 import org.example.entity.TeamMemberEntity;
+import org.example.repository.ProjectRepository;
+import org.example.repository.TaskRepository;
 import org.example.repository.TeamMemberRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,13 +16,14 @@ import org.springframework.stereotype.Service;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
 @AllArgsConstructor
 public class CacheInvalidationService {
 
     private final StringRedisTemplate redis;
+    private final ProjectRepository projectRepository;
+    private final TaskRepository taskRepository;
     private static final Logger log = LoggerFactory.getLogger(CacheInvalidationService.class);
 
     private final TeamMemberRepository teamMemberRepository;
@@ -44,6 +48,27 @@ public class CacheInvalidationService {
         String pattern = "projectPages::*" + marker + "*";
 
         deleteByScan(pattern);
+    }
+
+    public void evictTeamRelatedCaches(Long teamId){
+        evictProjectPagesForAllTeamMembers(teamId);
+
+        List<ProjectEntity> projects = projectRepository.findAllProjectsByTeamId(teamId);
+
+        if (projects.isEmpty()){
+            log.info("No projects found for team: {}.", teamId);
+        } else {
+            for (ProjectEntity project : projects){
+
+                evictTaskPagesByProjectId(project.getId());
+
+                List<Long> taskIds = taskRepository.findTaskIdsByProject_Id(project.getId());
+
+                for (Long taskId : taskIds){
+                    evictCommentPagesByTaskId(taskId);
+                }
+            }
+        }
     }
 
     public void evictProjectPagesForAllTeamMembers(Long teamId){

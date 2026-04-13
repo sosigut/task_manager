@@ -15,6 +15,7 @@ import org.example.mapper.CommentMapper;
 import org.example.pagination.*;
 import org.example.repository.CommentRepository;
 import org.example.repository.TaskRepository;
+import org.example.repository.TeamMemberRepository;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
@@ -38,6 +39,7 @@ public class CommentService {
     private final KeysetPageBuilder keysetPageBuilder;
     private final CacheInvalidationService cacheInvalidationService;
     private final MeterRegistry meterRegistry;
+    private final TeamAccessService teamAccessService;
 
     private Counter commentsCreatedCounter;
     private Counter commentsDeletedCounter;
@@ -76,6 +78,7 @@ public class CommentService {
                 .register(this.meterRegistry);
     }
 
+    @Transactional
     @PreAuthorize("isAuthenticated()")
     public CommentResponseDto createComment
             (Long taskId, CreateCommentRequestDto dto) {
@@ -83,11 +86,24 @@ public class CommentService {
         Timer.Sample sample = Timer.start(meterRegistry);
 
         try {
+
+            if (taskId == null) {
+                throw new IllegalArgumentException("Task ID is required");
+            }
+
+            if (dto == null) {
+                throw new IllegalArgumentException("Comment DTO is required");
+            }
+
             UserEntity currentUser = userService.getCurrentUser();
             TaskEntity task = taskRepository.findById(taskId)
                     .orElseThrow(()-> new NotFoundException("Task not found"));
 
-            boolean isAllowed = checkCommentPermission(currentUser, task);
+            TeamEntity team = task.getProject().getTeam();
+
+            TeamMemberEntity membership = teamAccessService.checkMembership(team, currentUser);
+
+            boolean isAllowed = checkCommentPermission(membership ,currentUser, task);
 
             if(!isAllowed){
                 throw new ForbiddenException("Недостаточно прав");
@@ -106,6 +122,22 @@ public class CommentService {
         }
     }
 
+    private boolean checkDeleteCommentPermission(TeamMemberEntity membership,
+                                                 UserEntity currentUser,
+                                                 CommentEntity comment) {
+        TeamRole role = membership.getRole();
+
+        if (role == TeamRole.OWNER || role == TeamRole.MANAGER) {
+            return true;
+        }
+
+        if (role == TeamRole.MEMBER) {
+            return comment.getAuthor().getId().equals(currentUser.getId());
+        }
+
+        return false;
+    }
+
     @Transactional
     @PreAuthorize("isAuthenticated()")
     public void deleteComment(Long commentId) {
@@ -113,19 +145,25 @@ public class CommentService {
         Timer.Sample sample = Timer.start(meterRegistry);
 
         try {
-            Optional<CommentEntity> comment = commentRepository.findById(commentId);
-            UserEntity currentUser = userService.getCurrentUser();
-
-            if(comment.isEmpty()){
-                throw new NotFoundException("Comment not found");
+            if (commentId == null) {
+                throw new IllegalArgumentException("Comment ID is required");
             }
 
-            CommentEntity commentEntity = comment.get();
-            Long taskId = commentEntity.getTask().getId();
-            boolean flag = isFlag(currentUser, commentEntity);
+            UserEntity currentUser = userService.getCurrentUser();
 
-            if(!flag){
-                throw new ForbiddenException("Недостаточно прав");
+            CommentEntity commentEntity = commentRepository.findById(commentId)
+                    .orElseThrow(() -> new NotFoundException("Comment not found"));
+
+            TaskEntity task = commentEntity.getTask();
+            TeamEntity team = task.getProject().getTeam();
+            Long taskId = task.getId();
+
+            TeamMemberEntity membership = teamAccessService.checkMembership(team, currentUser);
+
+            boolean isAllowed = checkDeleteCommentPermission(membership, currentUser, commentEntity);
+
+            if (!isAllowed) {
+                throw new ForbiddenException("Недостаточно прав для удаления комментария");
             }
 
             commentRepository.delete(commentEntity);
@@ -137,24 +175,11 @@ public class CommentService {
         }
     }
 
-    private static boolean isFlag(UserEntity currentUser, CommentEntity commentEntity) {
-        boolean flag;
+    private boolean checkCommentPermission(TeamMemberEntity membership, UserEntity currentUser, TaskEntity task){
 
-        if(currentUser.getRole() == Role.MANAGER || currentUser.getRole() == Role.ADMIN){
-            flag = true;
-        } else if(currentUser.getRole() == Role.USER){
-            flag = commentEntity.getAuthor().getId().equals(currentUser.getId());
-        } else {
-            flag = false;
-        }
-        return flag;
-    }
-
-    private boolean checkCommentPermission(UserEntity currentUser, TaskEntity task){
-
-        if(currentUser.getRole() == Role.ADMIN || currentUser.getRole() == Role.MANAGER){
+        if(membership.getRole() == TeamRole.OWNER || membership.getRole() == TeamRole.MANAGER){
             return true;
-        } else if(currentUser.getRole() == Role.USER){
+        } else if(membership.getRole() == TeamRole.MEMBER){
             return task.getAssignee().getId().equals(currentUser.getId());
         } else {
             return false;
@@ -173,6 +198,11 @@ public class CommentService {
         Timer.Sample sample = Timer.start(meterRegistry);
 
         try {
+
+            if (taskId == null) {
+                throw new IllegalArgumentException("Task ID is required");
+            }
+
             PaginationMode mode =  keysetPaginationUtils.cursorMode(cursorCreatedAt, cursorId);
             int pageSize = keysetPaginationUtils.normalizeLimit(limit);
             Pageable pageable = keysetPaginationUtils.createPageable(pageSize);
@@ -182,7 +212,11 @@ public class CommentService {
             TaskEntity task = taskRepository.findById(taskId)
                     .orElseThrow(()-> new NotFoundException("Task not found"));
 
-            boolean isAllowed = checkCommentPermission(currentUser, task);
+            TeamEntity team = task.getProject().getTeam();
+
+            TeamMemberEntity membership = teamAccessService.checkMembership(team, currentUser);
+
+            boolean isAllowed = checkCommentPermission(membership ,currentUser, task);
 
             if(!isAllowed){
                 throw new ForbiddenException("Недостаточно прав");

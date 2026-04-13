@@ -1,6 +1,7 @@
 package org.example.service;
 
 import lombok.RequiredArgsConstructor;
+import org.example.config.cache.CacheInvalidationService;
 import org.example.dto.TeamInvitationRequestDto;
 import org.example.dto.TeamInvitationResponseDto;
 import org.example.entity.*;
@@ -32,6 +33,7 @@ public class TeamInvitationService {
     private final UserService userService;
     private final UserRepository userRepository;
     private final TeamInvitationMapper teamInvitationMapper;
+    private final CacheInvalidationService cacheInvalidationService;
 
     @Transactional
     @PreAuthorize("isAuthenticated()")
@@ -175,6 +177,8 @@ public class TeamInvitationService {
 
         TeamInvitationEntity saveInvitation = teamInvitationRepository.save(invitation);
 
+        cacheInvalidationService.evictTeamRelatedCaches(invitation.getTeam().getId());
+
         return teamInvitationMapper.toDto(saveInvitation);
     }
 
@@ -220,7 +224,7 @@ public class TeamInvitationService {
         TeamInvitationEntity invitation = teamInvitationRepository.findById(invitationId)
                 .orElseThrow(() -> new NotFoundException("Invitation not found"));
 
-        if(currentUser.getId().equals(invitation.getInvitedBy().getId())) {
+        if(!(currentUser.getId().equals(invitation.getInvitedBy().getId()))) {
             throw new ForbiddenException("You cannot cancel this invitation");
         }
 

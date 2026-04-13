@@ -35,4 +35,6 @@ public interface ProjectRepository extends JpaRepository<ProjectEntity, Long> {
             @Param("cursorId") Long cursorId,
             Pageable pageable
     );
+
+    public List<ProjectEntity> findAllProjectsByTeamId(Long teamId);
 }
