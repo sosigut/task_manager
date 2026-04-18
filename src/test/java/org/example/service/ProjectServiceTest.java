@@ -1,7 +1,320 @@
 package org.example.service;
 
-public class ProjectServiceTest {
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import org.example.config.cache.CacheInvalidationService;
+import org.example.dto.CreateProjectRequestDto;
+import org.example.dto.ProjectResponseDto;
+import org.example.dto.UpdateProjectRequestDto;
+import org.example.entity.*;
+import org.example.exception.ForbiddenException;
+import org.example.mapper.ProjectMapper;
+import org.example.pagination.KeysetPageBuilder;
+import org.example.pagination.KeysetPaginationFetcher;
+import org.example.pagination.KeysetPaginationUtils;
+import org.example.repository.*;
+import org.hibernate.sql.Update;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.time.LocalDateTime;
+import java.util.Optional;
+import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
+
+@ExtendWith(MockitoExtension.class)
+class ProjectServiceTest {
+
+    @Mock
+    private ProjectMapper projectMapper;
+
+    @Mock
+    private UserService userService;
+
+    @Mock
+    private TeamAccessService teamAccessService;
+
+    @Mock
+    private ProjectRepository projectRepository;
+
+    @Mock
+    private KeysetPageBuilder keysetPageBuilder;
+
+    @Mock
+    private KeysetPaginationUtils keysetPaginationUtils;
+
+    @Mock
+    private KeysetPaginationFetcher keysetPaginationFetcher;
+
+    @Mock
+    private CacheInvalidationService cacheInvalidationService;
+
+    @Mock
+    private TaskRepository taskRepository;
+
+    @Mock
+    private CommentRepository commentRepository;
+
+    @Mock
+    private TaskHistoryRepository taskHistoryRepository;
+
+    @Mock
+    private TeamRepository teamRepository;
+
+    @Mock
+    private TeamMemberRepository teamMemberRepository;
+
+    private ProjectService projectService;
+    private MeterRegistry meterRegistry;
+
+    @BeforeEach
+    void setUp() {
+        meterRegistry = new SimpleMeterRegistry();
+
+        projectService = new ProjectService(
+                projectMapper,
+                userService,
+                teamAccessService,
+                projectRepository,
+                keysetPageBuilder,
+                keysetPaginationUtils,
+                keysetPaginationFetcher,
+                cacheInvalidationService,
+                taskRepository,
+                commentRepository,
+                taskHistoryRepository,
+                meterRegistry,
+                teamRepository,
+                teamMemberRepository
+        );
+
+        projectService.initMetrics();
+    }
+
+    @Test
+    void createProject_shouldCreateProject_whenUserIsOwner() {
+
+        Long userId = 10L;
+        Long teamId = 100L;
+        Long projectId = 999L;
+
+        UserEntity currentUser = UserEntity.builder()
+                .id(userId)
+                .publicUid("user-uid")
+                .email("test@mail.com")
+                .password("pass")
+                .firstName("Test")
+                .lastName("User")
+                .role(Role.USER)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        TeamEntity team = TeamEntity.builder()
+                .id(teamId)
+                .name("Backend Team")
+                .createdBy(currentUser)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        TeamMemberEntity membership = TeamMemberEntity.builder()
+                .team(team)
+                .user(currentUser)
+                .role(TeamRole.OWNER)
+                .joinedAt(LocalDateTime.now())
+                .build();
+
+        CreateProjectRequestDto dto = new CreateProjectRequestDto(
+                "New Project",
+                "Project Description",
+                teamId
+        );
+
+        ProjectEntity projectEntity = ProjectEntity.builder()
+                .name("New Project")
+                .description("Project Description")
+                .owner(currentUser)
+                .team(team)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        ProjectEntity savedProject = ProjectEntity.builder()
+                .id(projectId)
+                .name("New Project")
+                .description("Project Description")
+                .owner(currentUser)
+                .team(team)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        ProjectResponseDto responseDto = ProjectResponseDto.builder()
+                .id(projectId)
+                .name("New Project")
+                .description("Project Description")
+                .ownerId(userId)
+                .teamId(teamId)
+                .createdAt(savedProject.getCreatedAt())
+                .build();
+
+        when(userService.getCurrentUser()).thenReturn(currentUser);
+        when(teamRepository.findById(teamId)).thenReturn(Optional.of(team));
+
+        when(teamAccessService.checkMembershipRole(team, currentUser, Set.of(TeamRole.OWNER, TeamRole.MANAGER)))
+                .thenReturn(membership);
+
+        when(projectMapper.toEntity(dto, currentUser, team)).thenReturn(projectEntity);
+        when(projectRepository.save(projectEntity)).thenReturn(savedProject);
+        when(projectMapper.toDto(savedProject)).thenReturn(responseDto);
+
+        ProjectResponseDto result = projectService.createProject(dto, teamId);
+
+        assertNotNull(result);
+        assertEquals(projectId, result.getId());
+        assertEquals("New Project", result.getName());
+        assertEquals("Project Description", result.getDescription());
+        assertEquals(teamId, result.getTeamId());
+        assertEquals(userId, result.getOwnerId());
+
+        verify(projectRepository).save(projectEntity);
+        verify(cacheInvalidationService).evictProjectPagesForAllTeamMembers(teamId);
+    }
+
+    @Test
+    void createProject_shouldThrowForbidden_whenUserIsMember() {
+
+        Long userId = 10L;
+        Long teamId = 100L;
+
+        UserEntity currentUser = UserEntity.builder()
+                .id(userId)
+                .publicUid("user-uid")
+                .email("member@mail.com")
+                .firstName("Simple")
+                .lastName("Member")
+                .role(Role.USER)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        TeamEntity team = TeamEntity.builder()
+                .id(teamId)
+                .name("Backend Team")
+                .createdBy(UserEntity.builder().id(99L).build())
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        CreateProjectRequestDto dto = new CreateProjectRequestDto(
+                "New Project",
+                "Project Description",
+                teamId
+        );
+
+        when(userService.getCurrentUser()).thenReturn(currentUser);
+        when(teamRepository.findById(teamId)).thenReturn(Optional.of(team));
+
+        doThrow(new ForbiddenException(
+                "Недостаточно прав. User role: MEMBER, Required roles: [OWNER, MANAGER]"
+        )).when(teamAccessService).checkMembershipRole(
+                team,
+                currentUser,
+                Set.of(TeamRole.OWNER, TeamRole.MANAGER)
+        );
+        ForbiddenException exception = assertThrows(ForbiddenException.class,
+                () -> projectService.createProject(dto, teamId));
+
+        assertTrue(exception.getMessage().contains("Недостаточно прав"));
+        assertTrue(exception.getMessage().contains("Required roles"));
+
+        verify(projectRepository, never()).save(any(ProjectEntity.class));
+        verify(cacheInvalidationService, never()).evictProjectPagesForAllTeamMembers(any());
+
+    }
+
+    @Test
+    void updateProject_shouldUpdateProject_whenUserIsOwner(){
+
+        Long userId = 10L;
+        Long teamId = 100L;
+        Long projectId = 999L;
+
+        UserEntity currentUser = UserEntity.builder()
+                .id(userId)
+                .publicUid("user-uid")
+                .email("member@mail.com")
+                .firstName("Simple")
+                .lastName("Member")
+                .role(Role.USER)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        TeamEntity team = TeamEntity.builder()
+                .id(teamId)
+                .name("Backend Team")
+                .createdBy(UserEntity.builder().id(99L).build())
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        TeamMemberEntity membership = TeamMemberEntity.builder()
+                .team(team)
+                .user(currentUser)
+                .role(TeamRole.OWNER)
+                .joinedAt(LocalDateTime.now())
+                .build();
+
+        ProjectEntity project = ProjectEntity.builder()
+                .id(projectId)
+                .name("zazaza")
+                .description("zazazazazazaza")
+                .owner(currentUser)
+                .team(team)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        ProjectResponseDto responseDto = ProjectResponseDto.builder()
+                .id(projectId)
+                .name("aaaaaaaa")
+                .description("aaaaaaaaaaaaaaaa")
+                .ownerId(userId)
+                .teamId(teamId)
+                .createdAt(project.getCreatedAt())
+                .build();
 
 
+        UpdateProjectRequestDto dto = new UpdateProjectRequestDto(
+                "aaaaaaaa", "aaaaaaaaaaaaaaaa");
+
+        when(userService.getCurrentUser()).thenReturn(currentUser);
+        when(projectRepository.findById(projectId)).thenReturn(Optional.of(project));
+
+        when(teamAccessService.checkMembershipRole(team, currentUser, Set.of(TeamRole.OWNER, TeamRole.MANAGER)))
+                .thenReturn(membership);
+
+        when(projectRepository.save(project)).thenReturn(project);
+        when(projectMapper.toDto(project)).thenReturn(responseDto);
+
+        ProjectResponseDto result = projectService.updateProject(dto, projectId);
+
+        assertNotNull(result);
+        assertEquals(projectId, result.getId());
+        assertEquals("aaaaaaaa", result.getName());
+        assertEquals("aaaaaaaaaaaaaaaa", result.getDescription());
+        assertEquals(teamId, result.getTeamId());
+        assertEquals(userId, result.getOwnerId());
+
+        assertEquals("aaaaaaaa", project.getName());
+        assertEquals("aaaaaaaaaaaaaaaa", project.getDescription());
+
+        verify(projectRepository).findById(projectId);
+        verify(userService).getCurrentUser();
+        verify(teamAccessService).checkMembershipRole(team, currentUser, Set.of(TeamRole.OWNER, TeamRole.MANAGER));
+        verify(projectRepository).save(project);
+        verify(projectMapper).toDto(project);
+        verify(cacheInvalidationService).evictProjectPagesForAllTeamMembers(teamId);
+
+    }
 
 }
