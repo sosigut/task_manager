@@ -1,5 +1,6 @@
 package org.example.service;
 
+import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.example.config.cache.CacheInvalidationService;
@@ -8,20 +9,20 @@ import org.example.dto.ProjectResponseDto;
 import org.example.dto.UpdateProjectRequestDto;
 import org.example.entity.*;
 import org.example.exception.ForbiddenException;
+import org.example.exception.NotFoundException;
 import org.example.mapper.ProjectMapper;
 import org.example.pagination.KeysetPageBuilder;
 import org.example.pagination.KeysetPaginationFetcher;
 import org.example.pagination.KeysetPaginationUtils;
 import org.example.repository.*;
-import org.hibernate.sql.Update;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -313,6 +314,311 @@ class ProjectServiceTest {
         verify(teamAccessService).checkMembershipRole(team, currentUser, Set.of(TeamRole.OWNER, TeamRole.MANAGER));
         verify(projectRepository).save(project);
         verify(projectMapper).toDto(project);
+        verify(cacheInvalidationService).evictProjectPagesForAllTeamMembers(teamId);
+
+    }
+
+    @Test
+    void updateProject_shouldThrowIllegalArgumentException_whenBothFieldsAreNull(){
+
+        Long projectId = 999L;
+
+        UpdateProjectRequestDto dto = new UpdateProjectRequestDto(
+                null, null);
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> projectService.updateProject(dto, projectId)
+        );
+
+        assertEquals("Нет полей для обновления", exception.getMessage());
+
+        verify(projectRepository, never()).findById(any());
+        verify(userService, never()).getCurrentUser();
+        verify(teamAccessService, never()).checkMembershipRole(any(), any(), any());
+        verify(cacheInvalidationService, never()).evictProjectPagesForAllTeamMembers(any());
+        verify(projectRepository, never()).save(any(ProjectEntity.class));
+
+    }
+
+    @Test
+    void updateProject_shouldThrowIllegalArgumentException_whenNameIsBlank(){
+
+        Long userId = 10L;
+        Long teamId = 100L;
+        Long projectId = 999L;
+
+        UserEntity currentUser = UserEntity.builder()
+                .id(userId)
+                .publicUid("user-uid")
+                .email("member@mail.com")
+                .firstName("Simple")
+                .lastName("Member")
+                .role(Role.USER)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        TeamEntity team = TeamEntity.builder()
+                .id(teamId)
+                .name("Backend Team")
+                .createdBy(UserEntity.builder().id(99L).build())
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        TeamMemberEntity membership = TeamMemberEntity.builder()
+                .team(team)
+                .user(currentUser)
+                .role(TeamRole.OWNER)
+                .joinedAt(LocalDateTime.now())
+                .build();
+
+        ProjectEntity project = ProjectEntity.builder()
+                .id(projectId)
+                .name("zazaza")
+                .description("zazazazazazaza")
+                .owner(currentUser)
+                .team(team)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        UpdateProjectRequestDto dto = new UpdateProjectRequestDto(
+                " ", "aaaaaaaaaaaaaaaa");
+
+        when(userService.getCurrentUser()).thenReturn(currentUser);
+        when(projectRepository.findById(projectId)).thenReturn(Optional.of(project));
+
+        when(teamAccessService.checkMembershipRole(team, currentUser, Set.of(TeamRole.OWNER, TeamRole.MANAGER)))
+                .thenReturn(membership);
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> projectService.updateProject(dto, projectId)
+        );
+
+        assertEquals("Название проекта не должно быть пусты", exception.getMessage());
+
+        verify(projectRepository).findById(projectId);
+        verify(userService).getCurrentUser();
+        verify(teamAccessService).checkMembershipRole(team, currentUser, Set.of(TeamRole.OWNER, TeamRole.MANAGER));
+        verify(cacheInvalidationService, never()).evictProjectPagesForAllTeamMembers(any());
+        verify(projectRepository, never()).save(any(ProjectEntity.class));
+
+    }
+
+    @Test
+    void updateProject_shouldThrowIllegalArgumentException_whenDescriptionIsBlank(){
+
+        Long userId = 10L;
+        Long teamId = 100L;
+        Long projectId = 999L;
+
+        UserEntity currentUser = UserEntity.builder()
+                .id(userId)
+                .publicUid("user-uid")
+                .email("member@mail.com")
+                .firstName("Simple")
+                .lastName("Member")
+                .role(Role.USER)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        TeamEntity team = TeamEntity.builder()
+                .id(teamId)
+                .name("Backend Team")
+                .createdBy(UserEntity.builder().id(99L).build())
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        TeamMemberEntity membership = TeamMemberEntity.builder()
+                .team(team)
+                .user(currentUser)
+                .role(TeamRole.OWNER)
+                .joinedAt(LocalDateTime.now())
+                .build();
+
+        ProjectEntity project = ProjectEntity.builder()
+                .id(projectId)
+                .name("zazaza")
+                .description("zazazazazazaza")
+                .owner(currentUser)
+                .team(team)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        UpdateProjectRequestDto dto = new UpdateProjectRequestDto(
+                "aaaaaaaaaa", " ");
+
+        when(userService.getCurrentUser()).thenReturn(currentUser);
+        when(projectRepository.findById(projectId)).thenReturn(Optional.of(project));
+
+        when(teamAccessService.checkMembershipRole(team, currentUser, Set.of(TeamRole.OWNER, TeamRole.MANAGER)))
+                .thenReturn(membership);
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> projectService.updateProject(dto, projectId)
+        );
+
+        assertEquals("Описание проекта не должно быть пусты", exception.getMessage());
+
+        verify(projectRepository).findById(projectId);
+        verify(userService).getCurrentUser();
+        verify(teamAccessService).checkMembershipRole(team, currentUser, Set.of(TeamRole.OWNER, TeamRole.MANAGER));
+        verify(cacheInvalidationService, never()).evictProjectPagesForAllTeamMembers(any());
+        verify(projectRepository, never()).save(any(ProjectEntity.class));
+
+    }
+
+    @Test
+    void updateProject_shouldThrowNotFoundException_whenProjectDoesNotExist(){
+
+        Long projectId = 999L;
+
+        UpdateProjectRequestDto dto = new UpdateProjectRequestDto(
+                "aaaaaaaaaa", "aaaaaaaaa");
+
+        when(projectRepository.findById(projectId)).thenReturn(Optional.empty());
+
+        NotFoundException exception = assertThrows(
+                NotFoundException.class,
+                () -> projectService.updateProject(dto, projectId)
+        );
+
+        assertEquals("Project not found", exception.getMessage());
+
+        verify(projectRepository).findById(projectId);
+        verify(userService, never()).getCurrentUser();
+        verify(teamAccessService, never()).checkMembershipRole(any(), any(), any());
+        verify(cacheInvalidationService, never()).evictProjectPagesForAllTeamMembers(any());
+        verify(projectRepository, never()).save(any(ProjectEntity.class));
+
+    }
+
+    @Test
+    void updateProject_shouldThrowForbiddenException_whenUserIsMember(){
+
+        Long userId = 10L;
+        Long teamId = 100L;
+        Long projectId = 999L;
+
+        UserEntity currentUser = UserEntity.builder()
+                .id(userId)
+                .publicUid("user-uid")
+                .email("member@mail.com")
+                .firstName("Simple")
+                .lastName("Member")
+                .role(Role.USER)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        TeamEntity team = TeamEntity.builder()
+                .id(teamId)
+                .name("Backend Team")
+                .createdBy(UserEntity.builder().id(99L).build())
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        ProjectEntity project = ProjectEntity.builder()
+                .id(projectId)
+                .name("zazaza")
+                .description("zazazazazazaza")
+                .owner(currentUser)
+                .team(team)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        UpdateProjectRequestDto dto = new UpdateProjectRequestDto(
+                "aaaaaaaaaa", "aaaaaaaaaaaaaaa");
+
+        when(userService.getCurrentUser()).thenReturn(currentUser);
+        when(projectRepository.findById(projectId)).thenReturn(Optional.of(project));
+
+        when(teamAccessService.checkMembershipRole(team, currentUser, Set.of(TeamRole.OWNER, TeamRole.MANAGER)))
+                .thenThrow(new ForbiddenException("Недостаточно прав. User role: MEMBER, Required roles: [OWNER, MANAGER]"));
+
+        ForbiddenException exception = assertThrows(ForbiddenException.class,
+                () -> projectService.updateProject(dto, projectId));
+
+        assertEquals("Недостаточно прав. User role: MEMBER, Required roles: [OWNER, MANAGER]",
+                exception.getMessage());
+
+        verify(projectRepository).findById(projectId);
+        verify(userService).getCurrentUser();
+        verify(teamAccessService).checkMembershipRole(team,
+                currentUser,
+                Set.of(TeamRole.OWNER, TeamRole.MANAGER));
+        verify(cacheInvalidationService, never()).evictProjectPagesForAllTeamMembers(any());
+        verify(projectRepository, never()).save(any(ProjectEntity.class));
+
+    }
+
+    @Test
+    void deleteProject_shouldDeleteProject_whenUserIsOwner(){
+
+        Long ownerUserId = 10L;
+        Long teamId = 100L;
+        Long projectId = 999L;
+        Long taskId1 = 1L;
+        Long taskId2 = 2L;
+
+        UserEntity ownerUser = UserEntity.builder()
+                .id(ownerUserId)
+                .publicUid("user-uid")
+                .email("owner@mail.com")
+                .firstName("Simple")
+                .lastName("Member")
+                .role(Role.USER)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        TeamEntity team = TeamEntity.builder()
+                .id(teamId)
+                .name("Backend Team")
+                .createdBy(UserEntity.builder().id(99L).build())
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        ProjectEntity project = ProjectEntity.builder()
+                .id(projectId)
+                .name("zazaza")
+                .description("zazazazazazaza")
+                .owner(ownerUser)
+                .team(team)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        TeamMemberEntity membership = TeamMemberEntity.builder()
+                .team(team)
+                .user(ownerUser)
+                .role(TeamRole.OWNER)
+                .joinedAt(LocalDateTime.now())
+                .build();
+
+        List<Long> taskIds = List.of(taskId1, taskId2);
+
+        when(projectRepository.findById(projectId)).thenReturn(Optional.of(project));
+        when(userService.getCurrentUser()).thenReturn(ownerUser);
+        when(teamAccessService.checkMembershipRole(team, ownerUser, Set.of(TeamRole.OWNER, TeamRole.MANAGER)))
+                .thenReturn(membership);
+        when(taskRepository.findTaskIdsByProject_Id(projectId)).thenReturn(taskIds);
+
+        projectService.deleteProject(projectId);
+
+        verify(projectRepository).findById(projectId);
+        verify(userService).getCurrentUser();
+        verify(teamAccessService).checkMembershipRole(team, ownerUser, Set.of(TeamRole.OWNER, TeamRole.MANAGER));
+        verify(taskRepository).findTaskIdsByProject_Id(projectId);
+
+        verify(taskHistoryRepository).deleteByTask_ProjectId(projectId);
+        verify(commentRepository).deleteByTask_ProjectId(projectId);
+
+        verify(cacheInvalidationService).evictCommentPagesByTaskId(taskId1);
+        verify(cacheInvalidationService).evictCommentPagesByTaskId(taskId2);
+
+        verify(taskRepository).deleteByProject_Id(projectId);
+        verify(cacheInvalidationService).evictTaskPagesByProjectId(projectId);
+        verify(projectRepository).delete(project);
+
         verify(cacheInvalidationService).evictProjectPagesForAllTeamMembers(teamId);
 
     }

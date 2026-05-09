@@ -226,6 +226,11 @@ public class ProjectService {
         Timer.Sample sample = Timer.start(meterRegistry);
 
         try {
+
+            if(dto.getDescription() == null && dto.getName() == null) {
+                throw new IllegalArgumentException("Нет полей для обновления");
+            }
+
             ProjectEntity project = projectRepository.findById(projectId)
                     .orElseThrow(() -> new NotFoundException("Project not found"));
             UserEntity currentUser = userService.getCurrentUser();
@@ -235,10 +240,6 @@ public class ProjectService {
             Set<TeamRole> allowedRoles = Set.of(TeamRole.OWNER, TeamRole.MANAGER);
 
             teamAccessService.checkMembershipRole(team, currentUser, allowedRoles);
-
-            if(dto.getDescription() == null && dto.getName() == null) {
-                throw new IllegalArgumentException("Нет полей для обновления");
-            }
 
             if(dto.getDescription() != null) {
 
