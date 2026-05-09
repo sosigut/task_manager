@@ -3,6 +3,7 @@ package org.example.service;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import org.apache.catalina.User;
 import org.example.config.cache.CacheInvalidationService;
 import org.example.dto.CreateProjectRequestDto;
 import org.example.dto.ProjectResponseDto;
@@ -12,6 +13,7 @@ import org.example.exception.ForbiddenException;
 import org.example.exception.NotFoundException;
 import org.example.mapper.ProjectMapper;
 import org.example.pagination.KeysetPageBuilder;
+import org.example.pagination.KeysetPageResponseDto;
 import org.example.pagination.KeysetPaginationFetcher;
 import org.example.pagination.KeysetPaginationUtils;
 import org.example.repository.*;
@@ -19,9 +21,14 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
+import org.springframework.data.domain.SliceImpl;
 
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -44,13 +51,13 @@ class ProjectServiceTest {
     @Mock
     private ProjectRepository projectRepository;
 
-    @Mock
+    @Spy
     private KeysetPageBuilder keysetPageBuilder;
 
-    @Mock
+    @Spy
     private KeysetPaginationUtils keysetPaginationUtils;
 
-    @Mock
+    @Spy
     private KeysetPaginationFetcher keysetPaginationFetcher;
 
     @Mock
@@ -620,6 +627,131 @@ class ProjectServiceTest {
         verify(projectRepository).delete(project);
 
         verify(cacheInvalidationService).evictProjectPagesForAllTeamMembers(teamId);
+
+    }
+
+    @Test
+    void getMyTeamProjects_shouldReturnEmptyPage_whenUserHasNoTeams() {
+
+        UserEntity currentUser = UserEntity.builder().id(1L).build();
+        Integer limit = 10;
+
+
+        when(userService.getCurrentUser()).thenReturn(currentUser);
+        when(teamMemberRepository.findAllByUserId(currentUser.getId()))
+                .thenReturn(Collections.emptyList());
+
+        KeysetPageResponseDto<ProjectResponseDto> result =
+                projectService.getMyTeamProjects(limit, null, null);
+
+        assertNotNull(result);
+        assertTrue(result.getItems().isEmpty());
+        assertNull(result.getCursorCreatedAt());
+        assertNull(result.getCursorId());
+        assertFalse(result.isHasNext());
+
+        verifyNoInteractions(projectRepository);
+        verifyNoInteractions(keysetPaginationFetcher);
+    }
+
+    @Test
+    void getMyTeamProjects_shouldReturnFirstPage_whenCursorsAreNull(){
+
+        UserEntity currentUser = UserEntity.builder()
+                .id(1L)
+                .build();
+        
+        TeamEntity team = TeamEntity.builder()
+                .id(1L)
+                .build();
+        
+        TeamMemberEntity membership = TeamMemberEntity.builder()
+                .id(1L)
+                .user(currentUser)
+                .team(team)
+                .role(TeamRole.OWNER)
+                .build();
+
+        List<TeamMemberEntity> memberships = List.of(membership);
+
+        ProjectEntity project = ProjectEntity.builder()
+                .id(1L)
+                .team(team)
+                .build();
+
+        Slice<ProjectEntity> projectSlice = new SliceImpl<>(List.of(project));
+        
+        when(userService.getCurrentUser()).thenReturn(currentUser);
+        when(teamMemberRepository.findAllByUserId(currentUser.getId()))
+                .thenReturn(memberships);
+
+        when(projectRepository.findFirstPageByCreatedAtAndTeamIdsDesc(
+                eq(List.of(1L)), any(Pageable.class)))
+                .thenReturn(projectSlice);
+
+        KeysetPageResponseDto<ProjectResponseDto> result =
+                projectService.getMyTeamProjects(10, null, null);
+
+        assertNotNull(result);
+        assertFalse(result.getItems().isEmpty());
+        assertEquals(1, result.getItems().size());
+
+        verify(projectRepository).findFirstPageByCreatedAtAndTeamIdsDesc(
+                eq(List.of(1L)), any(Pageable.class)
+        );
+        verify(userService).getCurrentUser();
+        
+    }
+
+    @Test
+    void getMyTeamProjects_shouldReturnNextPage_whenCursorsAreProvided(){
+
+        LocalDateTime cursorDate = LocalDateTime.now();
+        Long cursorId = 5L;
+
+        UserEntity currentUser = UserEntity.builder()
+                .id(1L)
+                .build();
+
+        TeamEntity team = TeamEntity.builder()
+                .id(1L)
+                .build();
+
+        TeamMemberEntity membership = TeamMemberEntity.builder()
+                .id(1L)
+                .user(currentUser)
+                .team(team)
+                .role(TeamRole.OWNER)
+                .build();
+
+        List<TeamMemberEntity> memberships = List.of(membership);
+
+        ProjectEntity project = ProjectEntity.builder()
+                .id(1L)
+                .team(team)
+                .build();
+
+        Slice<ProjectEntity> projectSlice = new SliceImpl<>(List.of(project));
+
+        when(userService.getCurrentUser()).thenReturn(currentUser);
+        when(teamMemberRepository.findAllByUserId(currentUser.getId()))
+                .thenReturn(memberships);
+
+        when(projectRepository.findNextPageByCreatedAtAndTeamIdsAfterCursor(
+                eq(List.of(1L)), eq(cursorDate), eq(cursorId), any(Pageable.class)))
+                .thenReturn(projectSlice);
+
+        KeysetPageResponseDto<ProjectResponseDto> result =
+                projectService.getMyTeamProjects(10, cursorDate, cursorId);
+
+
+        assertNotNull(result);
+        assertFalse(result.getItems().isEmpty());
+        assertEquals(1, result.getItems().size());
+
+        verify(projectRepository).findNextPageByCreatedAtAndTeamIdsAfterCursor(
+                eq(List.of(1L)), eq(cursorDate), eq(cursorId), any(Pageable.class));
+        verify(userService).getCurrentUser();
 
     }
 
