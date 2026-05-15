@@ -1,9 +1,7 @@
 package org.example.service;
 
-import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import org.apache.catalina.User;
 import org.example.config.cache.CacheInvalidationService;
 import org.example.dto.CreateProjectRequestDto;
 import org.example.dto.ProjectResponseDto;
