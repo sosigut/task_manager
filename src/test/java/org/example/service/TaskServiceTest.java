@@ -2,9 +2,11 @@ package org.example.service;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import org.checkerframework.checker.units.qual.N;
 import org.example.config.cache.CacheInvalidationService;
 import org.example.dto.CreateTaskRequestDto;
 import org.example.dto.TaskResponseDto;
+import org.example.dto.UpdateTaskRequestDto;
 import org.example.entity.*;
 import org.example.exception.ForbiddenException;
 import org.example.exception.NotFoundException;
@@ -363,4 +365,210 @@ public class TaskServiceTest {
 
     }
 
+    @Test
+    void updateTask_shouldUpdateTask_whenUserIsAuthorized(){
+
+        UserEntity currentAssignee = UserEntity.builder()
+                .id(1L).build();
+
+        UserEntity updateAssignee = UserEntity.builder()
+                .id(10L).build();
+
+        TeamEntity team = TeamEntity.builder()
+                .id(1L).build();
+
+        ProjectEntity project = ProjectEntity.builder()
+                .id(1L)
+                .team(team)
+                .build();
+
+        TaskEntity task = TaskEntity.builder()
+                .id(1L)
+                .title("AAAAAAA")
+                .description("AAAAAAA")
+                .project(project)
+                .assignee(currentAssignee)
+                .build();
+
+        UpdateTaskRequestDto dto = UpdateTaskRequestDto.builder()
+                .title("BBBBBBBB")
+                .description("BBBBBBBB")
+                .assigneeId(10L)
+                .build();
+
+        TeamMemberEntity membershipCurrAssignee = TeamMemberEntity.builder()
+                .id(1L)
+                .user(currentAssignee)
+                .role(TeamRole.OWNER)
+                .team(team)
+                .build();
+
+        TeamMemberEntity membershipUpdateAssignee = TeamMemberEntity.builder()
+                .id(10L)
+                .user(updateAssignee)
+                .role(TeamRole.MANAGER)
+                .team(team)
+                .build();
+
+        TaskEntity savedTask = TaskEntity.builder()
+                .id(1L)
+                .title("BBBBBBBB")
+                .description("BBBBBBBB")
+                .project(project)
+                .assignee(updateAssignee)
+                .build();
+
+        TaskResponseDto taskResponseDto = TaskResponseDto.builder()
+                .id(1L)
+                .title("BBBBBBBB")
+                .description("BBBBBBBB")
+                .projectId(1L)
+                .assigneeId(10L)
+                .build();
+
+        when(taskRepository.findById(1L)).thenReturn(Optional.of(task));
+        when(userService.getCurrentUser()).thenReturn(currentAssignee);
+
+        when(teamAccessService.checkMembershipRole
+                (team, currentAssignee, Set.of(TeamRole.OWNER, TeamRole.MANAGER)))
+        .thenReturn(membershipCurrAssignee);
+
+        when(userRepository.findById(10L)).thenReturn(Optional.of(updateAssignee));
+        when(teamAccessService.checkMembership(team, updateAssignee))
+                .thenReturn(membershipUpdateAssignee);
+
+        when(taskRepository.save(task)).thenReturn(savedTask);
+        when(taskMapper.toDto(savedTask)).thenReturn(taskResponseDto);
+
+        TaskResponseDto result = taskService.updateTask(dto, 1L);
+
+        assertEquals(taskResponseDto, result);
+        assertEquals("BBBBBBBB", result.getTitle());
+        assertEquals("BBBBBBBB", result.getDescription());
+        assertEquals(10L, result.getAssigneeId());
+
+        verify(taskRepository).save(task);
+        verify(taskRepository).findById(1L);
+        verify(userService).getCurrentUser();
+        verify(teamAccessService).checkMembershipRole(
+                team, currentAssignee, Set.of(TeamRole.OWNER, TeamRole.MANAGER)
+        );
+        verify(userRepository).findById(10L);
+        verify(taskMapper).toDto(savedTask);
+        verify(teamAccessService).checkMembership(team, updateAssignee);
+        verify(cacheInvalidationService).evictTaskPagesByProjectId(project.getId());
+
+    }
+
+    @Test
+    void updateTask_shouldThrowIllegalArgumentException_whenTitleIsTooLong(){
+
+        UserEntity currentAssignee = UserEntity.builder()
+                .id(1L).build();
+
+        UserEntity updateAssignee = UserEntity.builder()
+                .id(10L).build();
+
+        TeamEntity team = TeamEntity.builder()
+                .id(1L).build();
+
+        ProjectEntity project = ProjectEntity.builder()
+                .id(1L)
+                .team(team)
+                .build();
+
+        TaskEntity task = TaskEntity.builder()
+                .id(1L)
+                .title("AAAAAAA")
+                .description("AAAAAAA")
+                .project(project)
+                .assignee(currentAssignee)
+                .build();
+
+        UpdateTaskRequestDto dto = UpdateTaskRequestDto.builder()
+                .title(" ")
+                .description("BBBBBBBB")
+                .assigneeId(updateAssignee.getId())
+                .build();
+
+        TeamMemberEntity membershipCurrAssignee = TeamMemberEntity.builder()
+                .id(1L)
+                .user(currentAssignee)
+                .role(TeamRole.OWNER)
+                .team(team)
+                .build();
+
+        when(taskRepository.findById(1L)).thenReturn(Optional.of(task));
+        when(userService.getCurrentUser()).thenReturn(currentAssignee);
+
+        when(teamAccessService.checkMembershipRole
+                (team, currentAssignee, Set.of(TeamRole.OWNER, TeamRole.MANAGER)))
+                .thenReturn(membershipCurrAssignee);
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> taskService.updateTask(dto, task.getId()));
+
+        assertEquals("Название задачи не должно быть пустым", exception.getMessage());
+
+        verify(taskRepository, never()).save(task);
+        verify(cacheInvalidationService, never()).evictTaskPagesByProjectId(project.getId());
+
+    }
+
+    @Test
+    void updateTask_shouldThrowNotFoundException_whenNewAssigneeDoesNotExist(){
+
+        UserEntity currentAssignee = UserEntity.builder()
+                .id(1L).build();
+
+        TeamEntity team = TeamEntity.builder()
+                .id(1L).build();
+
+        ProjectEntity project = ProjectEntity.builder()
+                .id(1L)
+                .team(team)
+                .build();
+
+        TaskEntity task = TaskEntity.builder()
+                .id(1L)
+                .title("AAAAAAA")
+                .description("AAAAAAA")
+                .project(project)
+                .assignee(currentAssignee)
+                .build();
+
+        UpdateTaskRequestDto dto = UpdateTaskRequestDto.builder()
+                .title("BBBBBBBB")
+                .description("BBBBBBBB")
+                .assigneeId(10L)
+                .build();
+
+        TeamMemberEntity membershipCurrAssignee = TeamMemberEntity.builder()
+                .id(1L)
+                .user(currentAssignee)
+                .role(TeamRole.OWNER)
+                .team(team)
+                .build();
+
+
+        when(taskRepository.findById(1L)).thenReturn(Optional.of(task));
+        when(userService.getCurrentUser()).thenReturn(currentAssignee);
+
+        when(teamAccessService.checkMembershipRole
+                (team, currentAssignee, Set.of(TeamRole.OWNER, TeamRole.MANAGER)))
+                .thenReturn(membershipCurrAssignee);
+
+        when(userRepository.findById(10L)).thenThrow(
+                new NotFoundException("Исполнитель задачи не найден")
+        );
+
+        NotFoundException exception = assertThrows(NotFoundException.class,
+                () -> taskService.updateTask(dto, task.getId()));
+
+        assertEquals("Исполнитель задачи не найден", exception.getMessage());
+
+        verify(taskRepository, never()).save(task);
+        verify(cacheInvalidationService, never()).evictTaskPagesByProjectId(project.getId());
+
+    }
 }
