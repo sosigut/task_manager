@@ -2,7 +2,6 @@ package org.example.service;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import org.checkerframework.checker.units.qual.N;
 import org.example.config.cache.CacheInvalidationService;
 import org.example.dto.CreateTaskRequestDto;
 import org.example.dto.TaskResponseDto;
@@ -12,16 +11,21 @@ import org.example.exception.ForbiddenException;
 import org.example.exception.NotFoundException;
 import org.example.mapper.TaskHistoryMapper;
 import org.example.mapper.TaskMapper;
-import org.example.pagination.KeysetPageBuilder;
-import org.example.pagination.KeysetPaginationFetcher;
-import org.example.pagination.KeysetPaginationUtils;
+import org.example.pagination.*;
 import org.example.repository.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
+import org.springframework.data.domain.SliceImpl;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -52,16 +56,16 @@ public class TaskServiceTest {
     @Mock
     private TaskHistoryRepository taskHistoryRepository;
 
-    @Mock
+    @Spy
     private KeysetPaginationUtils keysetPaginationUtils;
 
-    @Mock
+    @Spy
     private KeysetPageBuilder pageBuilder;
 
     @Mock
     private CommentRepository commentRepository;
 
-    @Mock
+    @Spy
     private KeysetPaginationFetcher keysetPaginationFetcher;
 
     @Mock
@@ -660,4 +664,132 @@ public class TaskServiceTest {
 
     }
 
+    @Test
+    void getKeysetTasksByProject_shouldReturnFirstPage_whenNoAssigneeProvided(){
+
+        Integer limit = 10;
+
+        TeamEntity team = TeamEntity.builder()
+                .id(1L).build();
+
+        ProjectEntity project = ProjectEntity.builder()
+                .id(1L)
+                .team(team)
+                .build();
+
+        UserEntity user = UserEntity.builder()
+                .id(1L).build();
+
+        TaskEntity task = TaskEntity.builder()
+                .id(1L)
+                .project(project)
+                .assignee(user)
+                .build();
+
+        TeamMemberEntity membership = TeamMemberEntity.builder()
+                .id(1L)
+                .user(user)
+                .role(TeamRole.MEMBER)
+                .build();
+
+        List<TaskEntity> tasks = List.of(task);
+        Slice<TaskEntity> taskSlice = new SliceImpl<>(tasks);
+
+        when(userService.getCurrentUser()).thenReturn(user);
+        when(projectRepository.findById(1L)).thenReturn(Optional.of(project));
+        when(teamAccessService.checkMembership(team, user)).thenReturn(membership);
+
+        when(keysetPaginationUtils.cursorMode(null, null)).thenReturn(PaginationMode.FIRST);
+        when(keysetPaginationUtils.normalizeLimit(limit)).thenReturn(limit);
+        when(keysetPaginationUtils.createPageable(limit)).thenReturn(PageRequest.of(0, limit + 1));
+
+        when(taskRepository.findFirstPageByProjectIdAndAssigneeId(
+                eq(1L), eq(1L), any(Pageable.class)))
+                .thenReturn(taskSlice);
+
+        when(keysetPaginationUtils.trim(taskSlice, limit))
+                .thenReturn(new KeysetSliceResult<>(tasks, false, null, null));
+
+        KeysetPageResponseDto<TaskResponseDto> result = taskService.getKeysetTasksByProject(
+                1L, limit, null, null);
+
+        assertNotNull(result);
+        assertFalse(result.getItems().isEmpty());
+        assertEquals(1, result.getItems().size());
+
+        verify(taskRepository).findFirstPageByProjectIdAndAssigneeId(
+                eq(1L), eq(1L), any(Pageable.class));
+
+        verify(taskRepository, never()).findFirstPageByProjectId(
+                any(Long.class), any(Pageable.class));
+
+        verify(pageBuilder).universalBuilder(any(), any(), eq(limit));
+
+    }
+
+    @Test
+    void getKeysetTasksByProject_shouldReturnNextPage_whenAssigneeIsProvided(){
+
+        Integer limit = 10;
+        Long cursorId = 1L;
+        LocalDateTime cursorCreatedAt = LocalDateTime.now();
+
+        TeamEntity team = TeamEntity.builder()
+                .id(1L).build();
+
+        ProjectEntity project = ProjectEntity.builder()
+                .id(1L)
+                .team(team)
+                .build();
+
+        UserEntity user = UserEntity.builder()
+                .id(1L).build();
+
+        TaskEntity task = TaskEntity.builder()
+                .id(1L)
+                .project(project)
+                .assignee(user)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        TeamMemberEntity membership = TeamMemberEntity.builder()
+                .id(1L)
+                .user(user)
+                .role(TeamRole.MEMBER)
+                .build();
+
+        List<TaskEntity> tasks = List.of(task);
+        Slice<TaskEntity> taskSlice = new SliceImpl<>(tasks);
+
+        when(keysetPaginationUtils.cursorMode(cursorCreatedAt, cursorId)).thenReturn(PaginationMode.NEXT);
+        when(keysetPaginationUtils.normalizeLimit(limit)).thenReturn(limit);
+        when(keysetPaginationUtils.createPageable(limit)).thenReturn(PageRequest.of(0, limit + 1));
+
+        when(userService.getCurrentUser()).thenReturn(user);
+        when(projectRepository.findById(1L)).thenReturn(Optional.of(project));
+        when(teamAccessService.checkMembership(team, user)).thenReturn(membership);
+
+        when(taskRepository.findNextByProjectIdAndAssigneeIdAfterCursor(
+                eq(1L), eq(1L), eq(cursorCreatedAt), eq(cursorId), any(Pageable.class)
+        )).thenReturn(taskSlice);
+
+        when(keysetPaginationUtils.trim(taskSlice, limit))
+                .thenReturn(new KeysetSliceResult<>(tasks, true, null, null));
+
+        KeysetPageResponseDto<TaskResponseDto> result = taskService.getKeysetTasksByProject(
+                1L, limit, cursorCreatedAt, cursorId);
+
+        assertNotNull(result);
+        assertFalse(result.getItems().isEmpty());
+        assertEquals(1, result.getItems().size());
+
+        verify(taskRepository).findNextByProjectIdAndAssigneeIdAfterCursor(
+                eq(1L), eq(1L), eq(cursorCreatedAt), eq(cursorId), any(Pageable.class));
+
+        verify(taskRepository, never()).findNextByProjectIdAfterCursor(
+                any(Long.class), any(LocalDateTime.class), any(Long.class), any(Pageable.class));
+
+        verify(pageBuilder).universalBuilder(any(), any(), eq(limit));
+
+    }
 }
