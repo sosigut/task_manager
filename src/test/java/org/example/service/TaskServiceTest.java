@@ -4,6 +4,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.example.config.cache.CacheInvalidationService;
 import org.example.dto.CreateTaskRequestDto;
+import org.example.dto.TaskHistoryResponseDto;
 import org.example.dto.TaskResponseDto;
 import org.example.dto.UpdateTaskRequestDto;
 import org.example.entity.*;
@@ -778,5 +779,88 @@ public class TaskServiceTest {
 
     }
 
+    @Test
+    void getTaskHistory_shouldReturnHistoryList_whenUserIsAuthorized(){
+
+        TeamEntity team = TeamEntity.builder()
+                .id(1L).build();
+
+        ProjectEntity project = ProjectEntity.builder()
+                .id(1L)
+                .team(team)
+                .build();
+
+        UserEntity currentUser = UserEntity.builder()
+                .id(1L).build();
+
+        TaskEntity task = TaskEntity.builder()
+                .id(1L)
+                .status(Status.TODO)
+                .assignee(currentUser)
+                .project(project)
+                .build();
+
+        TeamMemberEntity membership = TeamMemberEntity.builder()
+                .id(1L)
+                .team(team)
+                .user(currentUser)
+                .role(TeamRole.MEMBER)
+                .build();
+
+        TaskHistoryEntity history1 = TaskHistoryEntity.builder()
+                .id(1L)
+                .task(task)
+                .oldStatus(Status.TODO)
+                .newStatus(Status.IN_PROGRESS)
+                .changedBy(currentUser)
+                .changedAt(LocalDateTime.now().minusDays(1))
+                .build();
+
+        TaskHistoryEntity history2 = TaskHistoryEntity.builder()
+                .id(2L)
+                .task(task)
+                .oldStatus(Status.IN_PROGRESS)
+                .newStatus(Status.REVISION)
+                .changedBy(currentUser)
+                .changedAt(LocalDateTime.now().minusHours(5))
+                .build();
+
+        List<TaskHistoryEntity> historyList = List.of(history1, history2);
+
+        TaskHistoryResponseDto responseDto1 = TaskHistoryResponseDto.builder()
+                .oldStatus(Status.TODO)
+                .newStatus(Status.IN_PROGRESS)
+                .changedById(1L)
+                .build();
+
+        TaskHistoryResponseDto responseDto2 = TaskHistoryResponseDto.builder()
+                .oldStatus(Status.IN_PROGRESS)
+                .newStatus(Status.REVISION)
+                .changedById(1L)
+                .build();
+
+        List<TaskHistoryResponseDto> expectedResponse = List.of(responseDto1, responseDto2);
+
+        when(userService.getCurrentUser()).thenReturn(currentUser);
+        when(taskRepository.findById(1L)).thenReturn(Optional.of(task));
+        when(teamAccessService.checkMembership(team, currentUser)).thenReturn(membership);
+        when(taskHistoryRepository.findAllByTaskIdOrderByChangedAtAsc(1L)).thenReturn(historyList);
+        when(taskHistoryMapper.toDto(history1)).thenReturn(responseDto1);
+        when(taskHistoryMapper.toDto(history2)).thenReturn(responseDto2);
+
+        List<TaskHistoryResponseDto> result = taskService.getTaskHistory(1L);
+
+        assertNotNull(result);
+        assertFalse(result.isEmpty());
+        assertEquals(2, result.size());
+        assertEquals(expectedResponse, result);
+
+        verify(userService).getCurrentUser();
+        verify(taskRepository).findById(1L);
+        verify(teamAccessService).checkMembership(team, currentUser);
+        verify(taskHistoryRepository).findAllByTaskIdOrderByChangedAtAsc(1L);
+        verify(taskHistoryMapper, times(2)).toDto(any(TaskHistoryEntity.class));
+
+    }
 
 }
