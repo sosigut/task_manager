@@ -689,7 +689,7 @@ public class TaskServiceTest {
         TeamMemberEntity membership = TeamMemberEntity.builder()
                 .id(1L)
                 .user(user)
-                .role(TeamRole.MEMBER)
+                .role(TeamRole.OWNER)
                 .build();
 
         List<TaskEntity> tasks = List.of(task);
@@ -699,16 +699,8 @@ public class TaskServiceTest {
         when(projectRepository.findById(1L)).thenReturn(Optional.of(project));
         when(teamAccessService.checkMembership(team, user)).thenReturn(membership);
 
-        when(keysetPaginationUtils.cursorMode(null, null)).thenReturn(PaginationMode.FIRST);
-        when(keysetPaginationUtils.normalizeLimit(limit)).thenReturn(limit);
-        when(keysetPaginationUtils.createPageable(limit)).thenReturn(PageRequest.of(0, limit + 1));
-
-        when(taskRepository.findFirstPageByProjectIdAndAssigneeId(
-                eq(1L), eq(1L), any(Pageable.class)))
+        when(taskRepository.findFirstPageByProjectId(eq(1L), any(Pageable.class)))
                 .thenReturn(taskSlice);
-
-        when(keysetPaginationUtils.trim(taskSlice, limit))
-                .thenReturn(new KeysetSliceResult<>(tasks, false, null, null));
 
         KeysetPageResponseDto<TaskResponseDto> result = taskService.getKeysetTasksByProject(
                 1L, limit, null, null);
@@ -717,11 +709,11 @@ public class TaskServiceTest {
         assertFalse(result.getItems().isEmpty());
         assertEquals(1, result.getItems().size());
 
-        verify(taskRepository).findFirstPageByProjectIdAndAssigneeId(
-                eq(1L), eq(1L), any(Pageable.class));
+        verify(taskRepository).findFirstPageByProjectId(
+                eq(1L), any(Pageable.class));
 
-        verify(taskRepository, never()).findFirstPageByProjectId(
-                any(Long.class), any(Pageable.class));
+        verify(taskRepository, never()).findFirstPageByProjectIdAndAssigneeId(
+                any(Long.class), any(Long.class), any(Pageable.class));
 
         verify(pageBuilder).universalBuilder(any(), any(), eq(limit));
 
@@ -761,10 +753,6 @@ public class TaskServiceTest {
         List<TaskEntity> tasks = List.of(task);
         Slice<TaskEntity> taskSlice = new SliceImpl<>(tasks);
 
-        when(keysetPaginationUtils.cursorMode(cursorCreatedAt, cursorId)).thenReturn(PaginationMode.NEXT);
-        when(keysetPaginationUtils.normalizeLimit(limit)).thenReturn(limit);
-        when(keysetPaginationUtils.createPageable(limit)).thenReturn(PageRequest.of(0, limit + 1));
-
         when(userService.getCurrentUser()).thenReturn(user);
         when(projectRepository.findById(1L)).thenReturn(Optional.of(project));
         when(teamAccessService.checkMembership(team, user)).thenReturn(membership);
@@ -772,9 +760,6 @@ public class TaskServiceTest {
         when(taskRepository.findNextByProjectIdAndAssigneeIdAfterCursor(
                 eq(1L), eq(1L), eq(cursorCreatedAt), eq(cursorId), any(Pageable.class)
         )).thenReturn(taskSlice);
-
-        when(keysetPaginationUtils.trim(taskSlice, limit))
-                .thenReturn(new KeysetSliceResult<>(tasks, true, null, null));
 
         KeysetPageResponseDto<TaskResponseDto> result = taskService.getKeysetTasksByProject(
                 1L, limit, cursorCreatedAt, cursorId);
@@ -792,4 +777,6 @@ public class TaskServiceTest {
         verify(pageBuilder).universalBuilder(any(), any(), eq(limit));
 
     }
+
+
 }
