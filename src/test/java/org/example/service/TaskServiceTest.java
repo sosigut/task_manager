@@ -571,4 +571,93 @@ public class TaskServiceTest {
         verify(cacheInvalidationService, never()).evictTaskPagesByProjectId(project.getId());
 
     }
+
+    @Test
+    void deleteTask_shouldDeleteTaskAndRelatedData_whenUserHasRoles(){
+
+        TeamEntity team = TeamEntity.builder()
+                .id(1L).build();
+
+        ProjectEntity project = ProjectEntity.builder()
+                .id(1L)
+                .team(team)
+                .build();
+
+        UserEntity user = UserEntity.builder()
+                .id(1L).build();
+
+        TaskEntity task = TaskEntity.builder()
+                .id(1L)
+                .project(project)
+                .assignee(user)
+                .build();
+
+        TeamMemberEntity membership = TeamMemberEntity.builder()
+                .id(1L)
+                .user(user)
+                .role(TeamRole.OWNER)
+                .build();
+
+        when(taskRepository.findById(1L)).thenReturn(Optional.of(task));
+        when(userService.getCurrentUser()).thenReturn(user);
+
+        when(teamAccessService.checkMembershipRole
+                (team, user, Set.of(TeamRole.OWNER, TeamRole.MANAGER)))
+                .thenReturn(membership);
+
+        taskService.deleteTask(1L);
+
+        verify(commentRepository).deleteByTask_Id(task.getId());
+        verify(taskHistoryRepository).deleteByTask_Id(task.getId());
+        verify(taskRepository).delete(task);
+        verify(cacheInvalidationService).evictCommentPagesByTaskId(task.getId());
+        verify(cacheInvalidationService).evictTaskPagesByProjectId(project.getId());
+        verify(taskRepository).findById(1L);
+        verify(userService).getCurrentUser();
+        verify(teamAccessService).checkMembershipRole(team, user, Set.of(TeamRole.OWNER, TeamRole.MANAGER));
+
+    }
+
+    @Test
+    void deleteTask_shouldThrowForbiddenException_whenUserIsJustMember(){
+
+        TeamEntity team = TeamEntity.builder()
+                .id(1L).build();
+
+        ProjectEntity project = ProjectEntity.builder()
+                .id(1L)
+                .team(team)
+                .build();
+
+        UserEntity user = UserEntity.builder()
+                .id(1L).build();
+
+        TaskEntity task = TaskEntity.builder()
+                .id(1L)
+                .project(project)
+                .assignee(user)
+                .build();
+
+        when(taskRepository.findById(1L)).thenReturn(Optional.of(task));
+        when(userService.getCurrentUser()).thenReturn(user);
+
+        when(teamAccessService.checkMembershipRole
+                (team, user, Set.of(TeamRole.OWNER, TeamRole.MANAGER)))
+                .thenThrow(new ForbiddenException("Недостаточно прав. User role: MEMBER, Required roles: [OWNER, MANAGER]"));
+
+        ForbiddenException  exception = assertThrows(ForbiddenException.class,
+                () -> taskService.deleteTask(1L));
+
+        assertEquals("Недостаточно прав. User role: MEMBER, Required roles: [OWNER, MANAGER]", exception.getMessage());
+
+        verify(commentRepository, never()).deleteByTask_Id(task.getId());
+        verify(taskHistoryRepository, never()).deleteByTask_Id(task.getId());
+        verify(taskRepository, never()).delete(task);
+        verify(cacheInvalidationService, never()).evictCommentPagesByTaskId(task.getId());
+        verify(cacheInvalidationService, never()).evictTaskPagesByProjectId(project.getId());
+        verify(taskRepository).findById(1L);
+        verify(userService).getCurrentUser();
+
+    }
+
 }
