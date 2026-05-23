@@ -131,6 +131,20 @@ public class TaskService {
                 throw new IllegalArgumentException("Create task request DTO is required");
             }
 
+            if(dto.getTitle() != null){
+                String trimmedTitle = dto.getTitle().trim();
+                if(trimmedTitle.isEmpty()){
+                    throw new IllegalArgumentException("Заголовок задачи не должен быть пустым");
+                }
+            }
+
+            if(dto.getDescription() != null){
+                String trimmedDescription = dto.getDescription().trim();
+                if(trimmedDescription.isEmpty()){
+                    throw new IllegalArgumentException("Описание задачи не должен быть пустым");
+                }
+            }
+
             ProjectEntity project = projectRepository.findById(projectId)
                     .orElseThrow(() -> new NotFoundException("Project not found"));
 
