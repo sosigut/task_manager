@@ -4,10 +4,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.example.dto.CreateTaskRequestDto;
 import org.example.entity.*;
-import org.example.repository.ProjectRepository;
-import org.example.repository.TaskRepository;
-import org.example.repository.TeamRepository;
-import org.example.repository.UserRepository;
+import org.example.repository.*;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -39,16 +37,22 @@ public class TaskControllerIT extends IntegrationTestBase{
     private TaskRepository taskRepository;
 
     @Autowired
+    private TeamMemberRepository teamMemberRepository;
+
+    @Autowired
     private ProjectRepository projectRepository;
 
     @Autowired
     private ObjectMapper objectMapper;
 
-    @Test
-    @WithMockUser(username = "test@mail.ru")
-    void shouldCreateTaskViaApi() throws Exception {
+    private UserEntity user;
+    private TeamEntity team;
+    private ProjectEntity project;
+    private TeamMemberEntity membership;
 
-        UserEntity user = UserEntity.builder()
+    @BeforeEach
+    void setUp() {
+        user = UserEntity.builder()
                 .publicUid("14223654")
                 .email("test@mail.ru")
                 .password("testtest")
@@ -57,20 +61,37 @@ public class TaskControllerIT extends IntegrationTestBase{
                 .role(Role.MANAGER)
                 .createdAt(LocalDateTime.now())
                 .build();
+        userRepository.save(user);
 
-        TeamEntity team = TeamEntity.builder()
+        team = TeamEntity.builder()
                 .name("Test Team")
                 .createdBy(user)
                 .createdAt(LocalDateTime.now())
                 .build();
+        teamRepository.save(team);
 
-        ProjectEntity project = ProjectEntity.builder()
+        project = ProjectEntity.builder()
                 .name("Test Project")
                 .description("Test Project")
                 .owner(user)
                 .team(team)
                 .createdAt(LocalDateTime.now())
                 .build();
+        projectRepository.save(project);
+
+        membership = TeamMemberEntity.builder()
+                .team(team)
+                .user(user)
+                .role(TeamRole.MANAGER)
+                .joinedAt(LocalDateTime.now())
+                .build();
+        teamMemberRepository.save(membership);
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "test@mail.ru")
+    void shouldCreateTaskViaApi() throws Exception {
 
         CreateTaskRequestDto dto = CreateTaskRequestDto.builder()
                 .title("title")
@@ -78,13 +99,9 @@ public class TaskControllerIT extends IntegrationTestBase{
                 .assigneeId(user.getId())
                 .build();
 
-        userRepository.save(user);
-        teamRepository.save(team);
-        projectRepository.save(project);
-
         String jsonRequest = objectMapper.writeValueAsString(dto);
 
-        mockMvc.perform(post("projects/" + project.getId() + "/tasks") // Укажи свой URL контроллера
+        mockMvc.perform(post("/projects/" + project.getId() + "/tasks") // Укажи свой URL контроллера
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(jsonRequest))
 
@@ -100,32 +117,9 @@ public class TaskControllerIT extends IntegrationTestBase{
     }
 
     @Test
+    @WithMockUser(username = "test@mail.ru")
     @Transactional
     void shouldReturnBadRequest_whenTaskTitleIsEmpty() throws Exception{
-
-        UserEntity user = UserEntity.builder()
-                .publicUid("14223654")
-                .email("test@mail.ru")
-                .password("testtest")
-                .firstName("test")
-                .lastName("test")
-                .role(Role.MANAGER)
-                .createdAt(LocalDateTime.now())
-                .build();
-
-        TeamEntity team = TeamEntity.builder()
-                .name("Test Team")
-                .createdBy(user)
-                .createdAt(LocalDateTime.now())
-                .build();
-
-        ProjectEntity project = ProjectEntity.builder()
-                .name("Test Project")
-                .description("Test Project")
-                .owner(user)
-                .team(team)
-                .createdAt(LocalDateTime.now())
-                .build();
 
         CreateTaskRequestDto dto = CreateTaskRequestDto.builder()
                 .title("")
@@ -135,12 +129,73 @@ public class TaskControllerIT extends IntegrationTestBase{
 
         String jsonRequest = objectMapper.writeValueAsString(dto);
 
-        mockMvc.perform(post("/api/tasks/" + project.getId())
+        mockMvc.perform(post("/projects/" + project.getId() + "/tasks")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(jsonRequest))
 
                 // Проверяем, что сервер вернул ошибку 400 Bad Request
                 .andExpect(status().isBadRequest());
+
+    }
+
+    @Test
+    @Transactional
+    void shouldReturnUnauthorized_whenUserIsNotAuthenticated() throws Exception{
+
+        CreateTaskRequestDto dto = CreateTaskRequestDto.builder()
+                .title("title")
+                .description("description")
+                .assigneeId(user.getId())
+                .build();
+
+        String jsonRequest = objectMapper.writeValueAsString(dto);
+
+        mockMvc.perform(post("/projects/" + project.getId() + "/tasks")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(jsonRequest))
+                .andExpect(status().isUnauthorized());
+
+    }
+
+    @Test
+    @WithMockUser(username = "test@mail.ru")
+    @Transactional
+    void shouldReturnForbidden_whenUserHasNoRights() throws Exception {
+
+        membership.setRole(TeamRole.MEMBER);
+
+        CreateTaskRequestDto dto = CreateTaskRequestDto.builder()
+                .title("title")
+                .description("description")
+                .assigneeId(user.getId())
+                .build();
+
+        String jsonRequest = objectMapper.writeValueAsString(dto);
+
+        mockMvc.perform(post("/projects/" + project.getId() + "/tasks")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(jsonRequest))
+                .andExpect(status().isForbidden());
+
+    }
+
+    @Test
+    @Transactional
+    @WithMockUser(username = "test@mail.ru")
+    void shouldReturnNotFound_whenProjectDoesNotExist() throws Exception{
+
+        CreateTaskRequestDto dto = CreateTaskRequestDto.builder()
+                .title("title")
+                .description("description")
+                .assigneeId(user.getId())
+                .build();
+
+        String jsonRequest = objectMapper.writeValueAsString(dto);
+
+        mockMvc.perform(post("/projects/99999/tasks")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonRequest))
+                .andExpect(status().isNotFound());
 
     }
 }
