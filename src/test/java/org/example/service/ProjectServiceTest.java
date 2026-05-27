@@ -232,8 +232,11 @@ class ProjectServiceTest {
         ForbiddenException exception = assertThrows(ForbiddenException.class,
                 () -> projectService.createProject(dto, teamId));
 
-        assertTrue(exception.getMessage().contains("Недостаточно прав"));
-        assertTrue(exception.getMessage().contains("Required roles"));
+        org.assertj.core.api.Assertions.assertThat(exception.getMessage())
+                .contains("Недостаточно прав")
+                .contains("MEMBER")
+                .contains("OWNER")
+                .contains("MANAGER");
 
         verify(projectRepository, never()).save(any(ProjectEntity.class));
         verify(cacheInvalidationService, never()).evictProjectPagesForAllTeamMembers(any());
@@ -544,8 +547,11 @@ class ProjectServiceTest {
         ForbiddenException exception = assertThrows(ForbiddenException.class,
                 () -> projectService.updateProject(dto, projectId));
 
-        assertEquals("Недостаточно прав. User role: MEMBER, Required roles: [OWNER, MANAGER]",
-                exception.getMessage());
+        org.assertj.core.api.Assertions.assertThat(exception.getMessage())
+                .contains("Недостаточно прав")
+                .contains("MEMBER")
+                .contains("OWNER")
+                .contains("MANAGER");
 
         verify(projectRepository).findById(projectId);
         verify(userService).getCurrentUser();

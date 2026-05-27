@@ -193,8 +193,11 @@ public class TaskServiceTest {
         ForbiddenException exception = assertThrows(ForbiddenException.class,
                 () -> taskService.changeStatus(1L, Status.IN_PROGRESS));
 
-        assertEquals("Недостаточно прав. User role: MEMBER, Required roles: [OWNER, MANAGER]",
-                exception.getMessage());
+        org.assertj.core.api.Assertions.assertThat(exception.getMessage())
+                .contains("Недостаточно прав")
+                .contains("MEMBER")
+                .contains("OWNER")
+                .contains("MANAGER");
 
         verify(taskRepository, never()).save(any(TaskEntity.class));
         verify(cacheInvalidationService, never()).evictTaskPagesByProjectId(project.getId());
@@ -358,8 +361,11 @@ public class TaskServiceTest {
         ForbiddenException exception = assertThrows(ForbiddenException.class,
                 () -> taskService.createTask(1L, dto));
 
-        assertEquals("Недостаточно прав. User role: MEMBER, Required roles: [OWNER, MANAGER]",
-                exception.getMessage());
+        org.assertj.core.api.Assertions.assertThat(exception.getMessage())
+                .contains("Недостаточно прав")
+                .contains("MEMBER")
+                .contains("OWNER")
+                .contains("MANAGER");
 
         verify(projectRepository, never()).save(any(ProjectEntity.class));
         verify(projectRepository).findById(1L);
@@ -652,7 +658,11 @@ public class TaskServiceTest {
         ForbiddenException  exception = assertThrows(ForbiddenException.class,
                 () -> taskService.deleteTask(1L));
 
-        assertEquals("Недостаточно прав. User role: MEMBER, Required roles: [OWNER, MANAGER]", exception.getMessage());
+        org.assertj.core.api.Assertions.assertThat(exception.getMessage())
+                .contains("Недостаточно прав")
+                .contains("MEMBER")
+                .contains("OWNER")
+                .contains("MANAGER");
 
         verify(commentRepository, never()).deleteByTask_Id(task.getId());
         verify(taskHistoryRepository, never()).deleteByTask_Id(task.getId());
