@@ -1,0 +1,29 @@
+name: Java CI with Maven
+
+# Триггеры: когда запускать тесты
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest # Виртуальная машина от GitHub
+
+    steps:
+      # 1. Скачиваем твой код на виртуальную машину
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Устанавливаем Java 17
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven' # Кэшируем зависимости (ускоряет следующие запуски)
+
+      # 3. Запускаем сборку и прогон всех тестов
+      - name: Build and Test with Maven
+        run: mvn clean verify
