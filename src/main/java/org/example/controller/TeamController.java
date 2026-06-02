@@ -1,0 +1,35 @@
+package org.example.controller;
+
+import jakarta.validation.Valid;
+import lombok.AllArgsConstructor;
+import org.example.dto.CreateTeamRequestDto;
+import org.example.dto.TeamMemberResponseDto;
+import org.example.dto.TeamResponseDto;
+import org.example.service.TeamService;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@AllArgsConstructor
+@RequestMapping("/team")
+public class TeamController {
+
+    private final TeamService teamService;
+
+    @PostMapping("/add")
+    public TeamResponseDto createTeam(@Valid @RequestBody CreateTeamRequestDto dto) {
+        return teamService.createTeam(dto);
+    }
+
+    @GetMapping("/my_teams")
+    public List<TeamResponseDto> getMyTeams() {
+        return teamService.getMyTeams();
+    }
+
+    @GetMapping("/get_team_members/{teamId}")
+    public List<TeamMemberResponseDto> getTeamMembers(@PathVariable Long teamId) {
+        return teamService.getTeamMembers(teamId);
+    }
+
+}
