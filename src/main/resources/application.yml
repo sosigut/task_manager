@@ -48,6 +48,15 @@ management:
       show-details: never
 
 spring:
+  mail:
+    host: localhost
+    port: 1025
+    properties:
+      mail:
+        smtp:
+          auth: false
+          starttls:
+            enable: false
   datasource:
     url: jdbc:postgresql://localhost:5432/task_manager
     username: postgres

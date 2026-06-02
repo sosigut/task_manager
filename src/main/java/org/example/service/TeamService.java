@@ -1,5 +1,7 @@
 package org.example.service;
 
+import org.example.exception.NotFoundException;
+import org.example.repository.UserRepository;
 import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.example.dto.CreateTeamRequestDto;
@@ -30,6 +32,7 @@ public class TeamService {
     private final TeamMemberRepository teamMemberRepository;
     private final TeamMapper teamMapper;
     private final TeamMemberMapper teamMemberMapper;
+    private final TeamAccessService teamAccessService;
 
     @Transactional
     @PreAuthorize("isAuthenticated()")
@@ -73,9 +76,10 @@ public class TeamService {
 
         UserEntity currentUser = userService.getCurrentUser();
 
-        if (!teamMemberRepository.existsByTeamIdAndUserId(teamId, currentUser.getId())) {
-            throw new ForbiddenException("Access denied: you are not a member of this team");
-        }
+        TeamEntity team = teamRepository.findById(teamId)
+                .orElseThrow(() -> new NotFoundException("Team not found"));
+
+        teamAccessService.getMembershipOrThrow(team, currentUser);
 
         List<TeamMemberEntity> members = teamMemberRepository.findAllByTeamId(teamId);
 
