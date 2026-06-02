@@ -12,22 +12,22 @@ import java.util.List;
 
 @RestController
 @AllArgsConstructor
-@RequestMapping("/team")
+@RequestMapping("/teams")
 public class TeamController {
 
     private final TeamService teamService;
 
-    @PostMapping("/add")
+    @PostMapping
     public TeamResponseDto createTeam(@Valid @RequestBody CreateTeamRequestDto dto) {
         return teamService.createTeam(dto);
     }
 
-    @GetMapping("/my_teams")
+    @GetMapping("/my")
     public List<TeamResponseDto> getMyTeams() {
         return teamService.getMyTeams();
     }
 
-    @GetMapping("/get_team_members/{teamId}")
+    @GetMapping("/{teamId}/members")
     public List<TeamMemberResponseDto> getTeamMembers(@PathVariable Long teamId) {
         return teamService.getTeamMembers(teamId);
     }
