@@ -101,13 +101,7 @@ public class CommentService {
 
             TeamEntity team = task.getProject().getTeam();
 
-            TeamMemberEntity membership = teamAccessService.checkMembership(team, currentUser);
-
-            boolean isAllowed = checkCommentPermission(membership ,currentUser, task);
-
-            if(!isAllowed){
-                throw new ForbiddenException("Недостаточно прав");
-            }
+            teamAccessService.checkMembership(team, currentUser);
 
             CommentEntity comment = commentMapper.toEntity(dto, task, currentUser);
             CommentEntity saved =  commentRepository.save(comment);
@@ -175,18 +169,6 @@ public class CommentService {
         }
     }
 
-    private boolean checkCommentPermission(TeamMemberEntity membership, UserEntity currentUser, TaskEntity task){
-
-        if(membership.getRole() == TeamRole.OWNER || membership.getRole() == TeamRole.MANAGER){
-            return true;
-        } else if(membership.getRole() == TeamRole.MEMBER){
-            return task.getAssignee().getId().equals(currentUser.getId());
-        } else {
-            return false;
-        }
-
-    }
-
     @Cacheable(value = "commentPages",
     keyGenerator = "universalKeyGenerator")
     @PreAuthorize("isAuthenticated()")
@@ -214,13 +196,7 @@ public class CommentService {
 
             TeamEntity team = task.getProject().getTeam();
 
-            TeamMemberEntity membership = teamAccessService.checkMembership(team, currentUser);
-
-            boolean isAllowed = checkCommentPermission(membership ,currentUser, task);
-
-            if(!isAllowed){
-                throw new ForbiddenException("Недостаточно прав");
-            }
+            teamAccessService.checkMembership(team, currentUser);
 
             Slice<CommentEntity> slice = keysetPaginationFetcher.fetchSlice(
                     mode,

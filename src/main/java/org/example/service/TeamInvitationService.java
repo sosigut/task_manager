@@ -34,6 +34,7 @@ public class TeamInvitationService {
     private final UserRepository userRepository;
     private final TeamInvitationMapper teamInvitationMapper;
     private final CacheInvalidationService cacheInvalidationService;
+    private final EmailService emailService;
 
     @Transactional
     @PreAuthorize("isAuthenticated()")
@@ -82,6 +83,8 @@ public class TeamInvitationService {
                 .build();
 
         TeamInvitationEntity save = teamInvitationRepository.save(invitation);
+
+        emailService.sendTeamInvitation(invitedUser.getEmail(), team.getName(), currentUser.getFirstName(), save.getId());
 
         return teamInvitationMapper.toDto(save);
 

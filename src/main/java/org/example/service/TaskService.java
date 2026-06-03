@@ -5,6 +5,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
+import org.example.annotation.TrackTaskHistory;
 import org.example.config.cache.CacheInvalidationService;
 import org.example.dto.CreateTaskRequestDto;
 import org.example.dto.TaskHistoryResponseDto;
@@ -188,6 +189,7 @@ public class TaskService {
 
     @Transactional
     @PreAuthorize("isAuthenticated()")
+    @TrackTaskHistory
     public TaskResponseDto changeStatus(Long id, Status newStatus) {
 
         Timer.Sample sample = Timer.start(meterRegistry);
@@ -225,16 +227,6 @@ public class TaskService {
             taskRepository.save(task);
 
             cacheInvalidationService.evictTaskPagesByProjectId(task.getProject().getId());
-
-            TaskHistoryEntity taskHistory = TaskHistoryEntity.builder()
-                    .oldStatus(oldStatus)
-                    .newStatus(newStatus)
-                    .task(task)
-                    .changedBy(currentUser)
-                    .changedAt(LocalDateTime.now())
-                    .build();
-
-            taskHistoryRepository.save(taskHistory);
 
             getStatusChangeCounter(oldStatus, newStatus).increment();
 
