@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.example.config.cache.CacheInvalidationService;
 import org.example.dto.CreateTaskRequestDto;
 import org.example.dto.UpdateTaskRequestDto;
+import org.example.dto.UpdateTaskStatusRequestDto;
 import org.example.entity.*;
 import org.example.repository.*;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,6 +18,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 import static org.hamcrest.Matchers.hasSize;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -26,6 +28,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import org.springframework.http.MediaType;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Transactional
 @AutoConfigureMockMvc
@@ -52,6 +55,9 @@ public class TaskControllerIT extends IntegrationTestBase{
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private TaskHistoryRepository taskHistoryRepository;
 
     @MockBean
     private CacheInvalidationService cacheInvalidationService;
@@ -127,6 +133,44 @@ public class TaskControllerIT extends IntegrationTestBase{
 
                 // Можем проверить и другие поля
                 .andExpect(jsonPath("$.assigneeId").value(user.getId()));
+
+    }
+
+    @Test
+    @Transactional
+    @WithUserDetails(
+            value = "test@mail.ru",
+            setupBefore = org.springframework.security.test.context.support.TestExecutionEvent.TEST_EXECUTION
+    )
+    void shouldChangeStatusTaskViaApi() throws Exception {
+
+        TaskEntity task1 = TaskEntity.builder()
+                .title("Задача 1")
+                .description("Описание 1")
+                .status(Status.TODO)
+                .project(project)
+                .assignee(user)
+                .createdAt(LocalDateTime.now().minusHours(2))
+                .build();
+
+        taskRepository.save(task1);
+
+        UpdateTaskStatusRequestDto dto = UpdateTaskStatusRequestDto.builder()
+                .newStatus(Status.IN_PROGRESS)
+                .build();
+
+        mockMvc.perform(patch("/tasks/" + task1.getId() + "/status")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(dto)))
+                        .andExpect(status().isOk());
+
+        List<TaskHistoryEntity> history = taskHistoryRepository.findAll();
+        assertEquals(1, history.size());
+        TaskHistoryEntity historyEntity = history.get(0);
+        assertEquals(Status.TODO, historyEntity.getOldStatus());
+        assertEquals(Status.IN_PROGRESS, historyEntity.getNewStatus());
+        assertEquals(task1.getId(), historyEntity.getTask().getId());
+
 
     }
 

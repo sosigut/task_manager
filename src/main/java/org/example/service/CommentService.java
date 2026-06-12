@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.example.config.cache.CacheInvalidationService;
 import org.example.dto.CommentResponseDto;
 import org.example.dto.CreateCommentRequestDto;
+import org.example.dto.NotificationDto;
 import org.example.entity.*;
 import org.example.exception.ForbiddenException;
 import org.example.exception.NotFoundException;
@@ -24,6 +25,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Objects;
 import java.util.Optional;
 
 @Service
@@ -40,6 +42,7 @@ public class CommentService {
     private final CacheInvalidationService cacheInvalidationService;
     private final MeterRegistry meterRegistry;
     private final TeamAccessService teamAccessService;
+    private final NotificationService notificationService;
 
     private Counter commentsCreatedCounter;
     private Counter commentsDeletedCounter;
@@ -109,6 +112,21 @@ public class CommentService {
             cacheInvalidationService.evictCommentPagesByTaskId(taskId);
 
             commentsCreatedCounter.increment();
+
+            UserEntity assignee = task.getAssignee();
+
+            if(assignee != null && !Objects.equals(currentUser.getId(), assignee.getId())){
+
+                NotificationDto notificationDto = NotificationDto.builder()
+                        .type("NEW_COMMENT")
+                        .message(String.format("Пользователь %s оставил новый комментарий к вашей задаче", currentUser.getFirstName()))
+                        .entityType("TASK")
+                        .entityId(taskId)
+                        .build();
+
+                notificationService.sendPersonalNotification(assignee.getEmail(),  notificationDto);
+
+            }
 
             return commentMapper.toDto(saved);
         } finally {

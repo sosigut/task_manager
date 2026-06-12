@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
+import org.example.dto.NotificationDto;
 import org.example.entity.Status;
 import org.example.entity.TaskEntity;
 import org.example.entity.TaskHistoryEntity;
@@ -11,11 +12,13 @@ import org.example.entity.UserEntity;
 import org.example.exception.NotFoundException;
 import org.example.repository.TaskHistoryRepository;
 import org.example.repository.TaskRepository;
+import org.example.service.NotificationService;
 import org.example.service.TaskService;
 import org.example.service.UserService;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.util.Objects;
 import java.util.Optional;
 
 @Aspect
@@ -24,6 +27,7 @@ import java.util.Optional;
 public class TaskHistoryAspect {
 
     private final UserService userService;
+    private final NotificationService notificationService;
     private final TaskRepository taskRepository;
     private final TaskHistoryRepository taskHistoryRepository;
 
@@ -50,6 +54,21 @@ public class TaskHistoryAspect {
                 .build();
 
         taskHistoryRepository.save(taskHistory);
+
+        UserEntity assignee = task.getAssignee();
+        if(assignee != null && !Objects.equals(currentUser.getId(), assignee.getId())){
+
+            NotificationDto dto = NotificationDto.builder()
+                    .type("STATUS_CHANGED")
+                    .message(String.format("Пользователь %s измени статус вашей задачи на %s",
+                            currentUser.getFirstName(), task.getStatus()))
+                    .entityType("TASK")
+                    .entityId(taskId)
+                    .build();
+
+            notificationService.sendPersonalNotification(assignee.getEmail(), dto);
+
+        }
 
         return result;
     }

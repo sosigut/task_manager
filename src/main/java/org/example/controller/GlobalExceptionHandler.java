@@ -5,6 +5,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.example.dto.ErrorResponseDto;
 import org.example.exception.ForbiddenException;
 import org.example.exception.NotFoundException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -20,6 +22,8 @@ import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private final Logger logger = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     //ForbiddenEx 403
     @ExceptionHandler(ForbiddenException.class)
@@ -172,13 +176,13 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponseDto> handleException(
             Exception ex, HttpServletRequest request){
 
-        String message = "Внутренняя ошибка сервера";
+        logger.error("Unhandled exception at {}: {}", request.getRequestURI(), ex.getMessage(), ex);
 
         ErrorResponseDto error = ErrorResponseDto.builder()
                 .timestamp(LocalDateTime.now())
                 .status(HttpStatus.INTERNAL_SERVER_ERROR.value())
                 .error("Internal Server Error")
-                .message(message + " : " + ex.getMessage() + " : " + ex.getClass().getName())
+                .message("Внутренняя ошибка сервера. Инженеры уже разбираются.")
                 .path(request.getRequestURI())
                 .build();
 
