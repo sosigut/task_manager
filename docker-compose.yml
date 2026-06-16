@@ -61,6 +61,18 @@ services:
       - prometheus
     restart: unless-stopped
 
+  # 6. Медиа-сервер LiveKit для командных аудио/видео звонков
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: task_manager_livekit
+    # --bind разрешает входящие, --node-ip указывает, куда слать видео
+    command: --dev --bind 0.0.0.0 --node-ip 127.0.0.1
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "7882:7882/udp"
+    restart: unless-stopped
+
 # Объявляем тома для сохранения данных при перезапуске
 volumes:
   postgres_data:

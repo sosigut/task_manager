@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Manager - Голосовые каналы</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gray-900 text-white min-h-screen flex flex-col font-sans">
+
+<header class="bg-gray-800 p-4 shadow-md flex justify-between items-center z-10">
+    <h1 class="text-xl font-bold text-indigo-400">
+        <i class="fa-solid fa-headset mr-2"></i>Task Manager Conference
+    </h1>
+    <div class="flex items-center gap-4">
+        <div id="status-badge" class="px-3 py-1 rounded-full bg-red-500 text-xs font-semibold">
+            Отключен
+        </div>
+        <button id="btn-logout" onclick="logout()" class="text-gray-400 hover:text-white text-sm hidden">
+            <i class="fa-solid fa-right-from-bracket mr-1"></i> Выйти
+        </button>
+    </div>
+</header>
+
+<main class="flex-grow p-6 flex flex-col items-center justify-center relative">
+
+    <div id="auth-screen" class="bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-md">
+        <div class="flex border-b border-gray-700 mb-6 text-center font-semibold">
+            <button id="tab-login" onclick="switchAuthTab('login')" class="w-1/2 pb-3 border-b-2 border-indigo-500 text-indigo-400">Вход</button>
+            <button id="tab-register" onclick="switchAuthTab('register')" class="w-1/2 pb-3 border-b-2 border-transparent text-gray-400 hover:text-gray-200">Регистрация</button>
+        </div>
+
+        <div class="space-y-4">
+            <div id="reg-name-field" class="hidden">
+                <label class="block text-sm text-gray-400 mb-1">Имя</label>
+                <input id="auth-name" type="text" class="w-full p-2.5 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:border-indigo-500">
+            </div>
+            <div>
+                <label class="block text-sm text-gray-400 mb-1">Email</label>
+                <input id="auth-email" type="email" class="w-full p-2.5 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:border-indigo-500">
+            </div>
+            <div>
+                <label class="block text-sm text-gray-400 mb-1">Пароль</label>
+                <input id="auth-password" type="password" class="w-full p-2.5 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:border-indigo-500">
+            </div>
+
+            <button id="btn-auth-submit" onclick="handleAuthSubmit()" class="w-full bg-indigo-600 hover:bg-indigo-700 font-bold py-3 rounded-lg transition-colors mt-2">
+                Войти в аккаунт
+            </button>
+            <p id="auth-error" class="text-red-400 text-sm text-center hidden"></p>
+        </div>
+    </div>
+
+    <div id="dashboard-screen" class="bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-xl text-center hidden">
+        <div class="mb-6">
+            <div class="w-20 h-20 bg-indigo-600 rounded-full flex items-center justify-center text-3xl font-bold mx-auto mb-3 shadow-lg">
+                <i class="fa-solid fa-user-tie"></i>
+            </div>
+            <h2 class="text-2xl font-bold">Добро пожаловать обратно!</h2>
+            <p class="text-gray-400 text-sm mt-1">Выберите команду для подключения к голосовому каналу</p>
+        </div>
+
+        <div class="bg-gray-700/50 p-6 rounded-lg border border-gray-600 max-w-sm mx-auto space-y-4">
+            <div>
+                <label class="block text-sm text-gray-400 mb-1 text-left">Идентификатор команды (ID)</label>
+                <input id="teamIdInput" type="number" placeholder="Например: 1"
+                       class="w-full p-2.5 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:border-indigo-500 font-mono text-center">
+            </div>
+            <button onclick="startTeamCall()" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg transition-colors shadow-md">
+                <i class="fa-solid fa-phone mr-2"></i> Войти в голосовой канал
+            </button>
+        </div>
+        <p id="dashboard-error" class="text-red-400 text-sm mt-4 hidden"></p>
+    </div>
+
+    <div id="video-grid" class="w-full max-w-6xl grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 hidden">
+        <div id="local-participant" class="relative bg-gray-800 rounded-xl overflow-hidden aspect-video border-2 border-indigo-500 flex items-center justify-center shadow-lg">
+            <div id="local-avatar" class="text-4xl font-bold text-gray-500">ВЫ</div>
+            <div id="local-video-container" class="absolute inset-0 w-full h-full hidden"></div>
+            <div class="absolute bottom-2 left-2 bg-black/70 px-2 py-1 rounded text-sm z-10">
+                Вы (Локально)
+            </div>
+        </div>
+    </div>
+
+</main>
+
+<footer id="control-bar" class="bg-gray-800 p-4 flex justify-center gap-4 hidden z-10 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
+    <button id="btn-mic" onclick="toggleMic()" class="bg-gray-700 hover:bg-gray-600 h-12 w-12 rounded-full flex items-center justify-center transition-colors">
+        <i class="fa-solid fa-microphone text-xl"></i>
+    </button>
+    <button id="btn-cam" onclick="toggleCam()" class="bg-gray-700 hover:bg-gray-600 h-12 w-12 rounded-full flex items-center justify-center transition-colors">
+        <i class="fa-solid fa-video text-xl"></i>
+    </button>
+    <button onclick="leaveCall()" class="bg-red-600 hover:bg-red-700 h-12 px-6 rounded-full flex items-center justify-center transition-colors font-bold">
+        <i class="fa-solid fa-phone-slash mr-2"></i> Отключиться
+    </button>
+</footer>
+
+<script>
+    let currentRoom = null;
+    let isMicOn = false;
+    let isCamOn = false;
+    let authMode = 'login'; // 'login' или 'register'
+
+    // Автоматическая проверка сессии при загрузке страницы
+    window.onload = function() {
+        const token = localStorage.getItem("task_manager_jwt");
+        if (token) {
+            showScreen('dashboard-screen');
+            document.getElementById('btn-logout').classList.remove('hidden');
+        } else {
+            showScreen('auth-screen');
+        }
+    };
+
+    // Переключение экранов
+    function showScreen(screenId) {
+        document.getElementById('auth-screen').classList.add('hidden');
+        document.getElementById('dashboard-screen').classList.add('hidden');
+        document.getElementById('video-grid').classList.add('hidden');
+        document.getElementById('control-bar').classList.add('hidden');
+        document.getElementById('control-bar').classList.remove('flex');
+
+        document.getElementById(screenId).classList.remove('hidden');
+        if (screenId === 'video-grid') {
+            document.getElementById('control-bar').classList.remove('hidden');
+            document.getElementById('control-bar').classList.add('flex');
+        }
+    }
+
+    // Переключение между Входом и Регистрацией
+    function switchAuthTab(mode) {
+        authMode = mode;
+        const tabLogin = document.getElementById('tab-login');
+        const tabRegister = document.getElementById('tab-register');
+        const nameField = document.getElementById('reg-name-field');
+        const submitBtn = document.getElementById('btn-auth-submit');
+        document.getElementById('auth-error').classList.add('hidden');
+
+        if (mode === 'login') {
+            tabLogin.className = "w-1/2 pb-3 border-b-2 border-indigo-500 text-indigo-400";
+            tabRegister.className = "w-1/2 pb-3 border-b-2 border-transparent text-gray-400 hover:text-gray-200";
+            nameField.classList.add('hidden');
+            submitBtn.innerText = "Войти в аккаунт";
+        } else {
+            tabRegister.className = "w-1/2 pb-3 border-b-2 border-indigo-500 text-indigo-400";
+            tabLogin.className = "w-1/2 pb-3 border-b-2 border-transparent text-gray-400 hover:text-gray-200";
+            nameField.classList.remove('hidden');
+            submitBtn.innerText = "Создать аккаунт";
+        }
+    }
+
+    // Обработка отправки формы Авторизации / Регистрации
+    async function handleAuthSubmit() {
+        const email = document.getElementById('auth-email').value.trim();
+        const password = document.getElementById('auth-password').value.trim();
+        const firstName = document.getElementById('auth-name').value.trim();
+        const errorEl = document.getElementById('auth-error');
+
+        if (!email || !password || (authMode === 'register' && !firstName)) {
+            errorEl.innerText = "Пожалуйста, заполните все поля";
+            errorEl.classList.remove('hidden');
+            return;
+        }
+
+        errorEl.classList.add('hidden');
+
+        // ВНИМАНИЕ: Проверь соответствие путей и структуры JSON со своим бэкендом
+        const url = authMode === 'login' ? '/auth/login' : '/auth/register';
+        const bodyData = authMode === 'login'
+            ? { email, password }
+            : { email, password, firstName };
+
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(bodyData)
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.message || "Ошибка аутентификации");
+            }
+
+            // Сохраняем Спринговый JWT-токен (ВНИМАНИЕ: Проверь имя поля в твоем DTO, например data.token или data.accessToken)
+            const jwtToken = data.token || data.accessToken;
+            if (!jwtToken) {
+                throw new Error("Сервер не вернул токен авторизации");
+            }
+
+            localStorage.setItem("task_manager_jwt", jwtToken);
+            document.getElementById('btn-logout').classList.remove('hidden');
+            showScreen('dashboard-screen');
+
+        } catch (err) {
+            errorEl.innerText = err.message;
+            errorEl.classList.remove('hidden');
+        }
+    }
+
+    // --- ВХОД В ГОЛОСОВОЙ КАНАЛ ПО ОДНОЙ КНОПКЕ ---
+    async function startTeamCall() {
+        const teamId = document.getElementById('teamIdInput').value;
+        const errorEl = document.getElementById('dashboard-error');
+        const statusBadge = document.getElementById('status-badge');
+        const appToken = localStorage.getItem("task_manager_jwt");
+
+        if (!teamId) {
+            errorEl.innerText = "Введите ID команды";
+            errorEl.classList.remove('hidden');
+            return;
+        }
+
+        errorEl.classList.add('hidden');
+        statusBadge.innerText = "Запрос пропуска...";
+        statusBadge.className = "px-3 py-1 rounded-full bg-yellow-500 text-xs font-semibold text-black";
+
+        try {
+            // 1. Автоматический запрос токена созвона у твоего LiveKitController
+            const response = await fetch(`/calls/team/${teamId}/token`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${appToken}`
+                }
+            });
+
+            if (response.status === 401 || response.status === 403) {
+                throw new Error("Сессия просрочена или у вас нет доступа к этой команде");
+            }
+
+            const data = await response.json();
+            const liveKitToken = data.token; // Наш сгенерированный токен медиа-сервера
+
+            // 2. Инициализация комнаты LiveKit
+            const room = new LivekitClient.Room();
+            currentRoom = room;
+
+            // Слушаем появление чужих медиапотоков
+            room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => {
+                let wrapper = document.getElementById(`participant-${participant.identity}`);
+
+                if (!wrapper) {
+                    wrapper = document.createElement('div');
+                    wrapper.id = `participant-${participant.identity}`;
+                    wrapper.className = "relative bg-gray-800 rounded-xl overflow-hidden aspect-video border border-gray-700 shadow-lg flex items-center justify-center";
+
+                    const avatar = document.createElement('div');
+                    avatar.id = `avatar-${participant.identity}`;
+                    avatar.className = "text-2xl font-bold text-gray-500 uppercase";
+                    avatar.innerText = (participant.name || participant.identity).substring(0, 2);
+
+                    const nameLabel = document.createElement('div');
+                    nameLabel.className = "absolute bottom-2 left-2 bg-black/70 px-2 py-1 rounded text-sm z-10";
+                    nameLabel.innerText = participant.name || participant.identity;
+
+                    wrapper.appendChild(avatar);
+                    wrapper.appendChild(nameLabel);
+                    document.getElementById('video-grid').appendChild(wrapper);
+                }
+
+                const element = track.attach();
+                if (track.kind === LivekitClient.Track.Kind.Video) {
+                    element.className = "absolute inset-0 w-full h-full object-cover";
+                    document.getElementById(`avatar-${participant.identity}`).classList.add('hidden');
+                    wrapper.appendChild(element);
+                } else if (track.kind === LivekitClient.Track.Kind.Audio) {
+                    wrapper.appendChild(element); // Невидимый тег <audio>
+                }
+            });
+
+            // Слушаем отключение чужих потоков
+            room.on(LivekitClient.RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
+                track.detach().forEach(el => el.remove());
+                if (track.kind === LivekitClient.Track.Kind.Video) {
+                    const avatar = document.getElementById(`avatar-${participant.identity}`);
+                    if (avatar) avatar.classList.remove('hidden');
+                }
+            });
+
+            // Полный выход участника
+            room.on(LivekitClient.RoomEvent.ParticipantDisconnected, (participant) => {
+                const wrapper = document.getElementById(`participant-${participant.identity}`);
+                if (wrapper) wrapper.remove();
+            });
+
+            // 3. Подключение к WebRTC сокету
+            await room.connect('ws://127.0.0.1:7880', liveKitToken);
+
+            // Переключаем интерфейс на экран звонка
+            showScreen('video-grid');
+            statusBadge.innerText = "В сети";
+            statusBadge.className = "px-3 py-1 rounded-full bg-green-500 text-xs font-semibold text-white";
+
+            // 4. Запрос микрофона
+            try {
+                await room.localParticipant.setMicrophoneEnabled(true);
+                isMicOn = true;
+                updateBtnUI('btn-mic', isMicOn, 'fa-microphone', 'fa-microphone-slash');
+            } catch (e) {
+                console.warn("Микрофон отсутствует или заблокирован:", e);
+            }
+
+            // 5. Запрос камеры
+            try {
+                await room.localParticipant.setCameraEnabled(true);
+                isCamOn = true;
+                updateBtnUI('btn-cam', isCamOn, 'fa-video', 'fa-video-slash');
+                renderLocalVideo();
+            } catch (e) {
+                console.warn("Камера отсутствует или заблокирована:", e);
+            }
+
+        } catch (err) {
+            errorEl.innerText = err.message;
+            errorEl.classList.remove('hidden');
+            statusBadge.innerText = "Ошибка";
+            statusBadge.className = "px-3 py-1 rounded-full bg-red-500 text-xs font-semibold";
+        }
+    }
+
+    // --- ФУНКЦИИ УПРАВЛЕНИЯ УСТРОЙСТВАМИ ---
+
+    async function toggleMic() {
+        if (!currentRoom) return;
+        isMicOn = !isMicOn;
+        try {
+            await currentRoom.localParticipant.setMicrophoneEnabled(isMicOn);
+            updateBtnUI('btn-mic', isMicOn, 'fa-microphone', 'fa-microphone-slash');
+        } catch (e) {
+            alert("Ошибка доступа к микрофону");
+            isMicOn = false;
+        }
+    }
+
+    async function toggleCam() {
+        if (!currentRoom) return;
+        isCamOn = !isCamOn;
+        try {
+            await currentRoom.localParticipant.setCameraEnabled(isCamOn);
+            updateBtnUI('btn-cam', isCamOn, 'fa-video', 'fa-video-slash');
+
+            if (isCamOn) {
+                renderLocalVideo();
+            } else {
+                document.getElementById('local-video-container').innerHTML = '';
+                document.getElementById('local-video-container').classList.add('hidden');
+                document.getElementById('local-avatar').classList.remove('hidden');
+            }
+        } catch (e) {
+            alert("Камера не найдена или заблокирована");
+            isCamOn = false;
+        }
+    }
+
+    function renderLocalVideo() {
+        const container = document.getElementById('local-video-container');
+        const avatar = document.getElementById('local-avatar');
+        const cameraPublication = Array.from(currentRoom.localParticipant.videoTrackPublications.values())[0];
+
+        if (cameraPublication && cameraPublication.track) {
+            container.innerHTML = '';
+            const videoEl = cameraPublication.track.attach();
+            videoEl.className = "w-full h-full object-cover";
+            videoEl.style.transform = 'scaleX(-1)'; // Эффект зеркала
+            container.appendChild(videoEl);
+
+            avatar.classList.add('hidden');
+            container.classList.remove('hidden');
+        }
+    }
+
+    function updateBtnUI(btnId, isActive, iconOn, iconOff) {
+        const btn = document.getElementById(btnId);
+        const icon = btn.querySelector('i');
+        if (isActive) {
+            btn.className = "bg-gray-700 hover:bg-gray-600 h-12 w-12 rounded-full flex items-center justify-center transition-colors";
+            icon.className = `fa-solid ${iconOn} text-xl`;
+        } else {
+            btn.className = "bg-red-500 hover:bg-red-600 h-12 w-12 rounded-full flex items-center justify-center transition-colors";
+            icon.className = `fa-solid ${iconOff} text-xl`;
+        }
+    }
+
+    // Отключение от созвона и возврат в кабинет
+    function leaveCall() {
+        if (currentRoom) {
+            currentRoom.disconnect();
+        }
+        showScreen('dashboard-screen');
+        document.getElementById('status-badge').innerText = "Отключен";
+        document.getElementById('status-badge').className = "px-3 py-1 rounded-full bg-red-500 text-xs font-semibold";
+    }
+
+    // Выход из учетной записи
+    function logout() {
+        if (currentRoom) currentRoom.disconnect();
+        localStorage.removeItem("task_manager_jwt");
+        document.getElementById('btn-logout').classList.add('hidden');
+        showScreen('auth-screen');
+    }
+</script>
+</body>
+</html>
