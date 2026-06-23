@@ -15,7 +15,6 @@
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(99, 102, 241, 1); }
     </style>
 </head>
-<!-- h-screen и flex позволяют разбить экран на левую (приложение) и правую (чат) колонки -->
 <body class="bg-gray-900 text-white h-screen w-screen flex font-sans overflow-hidden">
 
 <!-- ЛЕВАЯ КОЛОНКА (Основное приложение) -->
@@ -78,9 +77,10 @@
             <p id="dashboard-error" class="text-red-400 text-sm mt-4 text-center hidden"></p>
         </div>
 
-        <!-- Экран созвона (Обертка flex-wrap заменяет жесткую сетку) -->
+        <!-- Экран созвона -->
         <div id="call-container" class="w-full flex-grow hidden">
-            <div id="video-grid" class="w-full flex-grow p-4 flex flex-wrap items-center justify-center gap-4 overflow-y-auto content-center">
+            <!-- ДОБАВЛЕНО: pb-24 чтобы видео не залезали под фиксированную панель управления -->
+            <div id="video-grid" class="w-full flex-grow p-4 pb-24 flex flex-wrap items-center justify-center gap-4 overflow-y-auto content-center">
                 <div id="local-participant" class="relative bg-gray-800 rounded-xl overflow-hidden aspect-video border-2 border-indigo-500 shadow-lg flex items-center justify-center transition-all duration-300">
                     <div id="local-avatar" class="text-4xl font-bold text-gray-500">ВЫ</div>
                     <div id="local-video-container" class="absolute inset-0 w-full h-full hidden bg-black"></div>
@@ -92,26 +92,6 @@
             </div>
         </div>
     </main>
-
-    <footer id="control-bar" class="bg-gray-800 p-4 flex justify-center gap-4 hidden z-10 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] shrink-0">
-        <button id="btn-mic" onclick="toggleMic()" class="bg-red-500 hover:bg-red-600 h-12 w-12 rounded-full flex items-center justify-center transition-colors shadow-lg">
-            <i class="fa-solid fa-microphone-slash text-xl"></i>
-        </button>
-        <button id="btn-cam" onclick="toggleCam()" class="bg-red-500 hover:bg-red-600 h-12 w-12 rounded-full flex items-center justify-center transition-colors shadow-lg">
-            <i class="fa-solid fa-video-slash text-xl"></i>
-        </button>
-        <button id="btn-screen" onclick="toggleScreen()" class="bg-red-500 hover:bg-red-600 h-12 w-12 rounded-full flex items-center justify-center transition-colors shadow-lg">
-            <i class="fa-solid fa-desktop text-xl"></i>
-        </button>
-        <!-- Кнопка чата -->
-        <button id="btn-chat" onclick="toggleChat()" class="bg-gray-700 hover:bg-gray-600 h-12 w-12 rounded-full flex items-center justify-center transition-colors shadow-lg relative ml-2">
-            <i class="fa-solid fa-comments text-xl"></i>
-            <span id="chat-badge" class="absolute top-0 right-0 bg-red-500 w-3 h-3 rounded-full hidden border-2 border-gray-800"></span>
-        </button>
-        <button onclick="leaveCall()" class="bg-gray-700 hover:bg-gray-600 h-12 px-6 rounded-full flex items-center justify-center transition-colors font-bold shadow-lg ml-4">
-            <i class="fa-solid fa-phone-slash mr-2 text-red-400"></i> Отключиться
-        </button>
-    </footer>
 </div> <!-- КОНЕЦ ЛЕВОЙ КОЛОНКИ -->
 
 <!-- ПРАВАЯ КОЛОНКА (ЧАТ) - Встроен в поток (не fixed) -->
@@ -124,10 +104,11 @@
             <i class="fa-solid fa-xmark text-xl"></i>
         </button>
     </div>
-    <div id="chat-messages" class="flex-grow p-4 space-y-3 overflow-y-auto custom-scrollbar text-sm">
+    <div id="chat-messages" class="flex-grow p-4 space-y-3 overflow-y-auto custom-scrollbar text-sm pb-24">
         <div class="text-center text-xs text-gray-500 my-2">Добро пожаловать в чат! Сообщения не сохраняются.</div>
     </div>
-    <div class="p-4 border-t border-gray-800 bg-gray-900 flex gap-2 shrink-0">
+    <!-- ДОБАВЛЕНО: z-50 и relative чтобы поле ввода было поверх возможного control-bar (хотя мы это избежали отступами) -->
+    <div class="p-4 border-t border-gray-800 bg-gray-900 flex gap-2 shrink-0 z-50 relative">
         <input id="chat-input" type="text" placeholder="Сообщение..." onkeypress="handleChatEnter(event)"
                class="flex-grow p-2.5 rounded-lg bg-gray-700 border border-gray-600 focus:outline-none focus:border-indigo-500 text-white text-sm shadow-inner">
         <button onclick="sendChatMessage()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 rounded-lg transition-colors shadow-md">
@@ -135,6 +116,32 @@
         </button>
     </div>
 </div>
+
+<!-- ИЗМЕНЕНО: Панель управления теперь fixed внизу по центру всего экрана -->
+<!-- z-50 обеспечивает отображение поверх всего -->
+<footer id="control-bar" class="fixed bottom-0 left-0 w-full p-4 flex justify-center gap-4 hidden z-50 pointer-events-none transition-all duration-300">
+    <!-- Обертка для кнопок, восстанавливаем pointer-events чтобы кнопки кликались -->
+    <div class="bg-gray-800/90 backdrop-blur-sm p-3 rounded-full flex gap-4 shadow-[0_4px_20px_rgba(0,0,0,0.3)] pointer-events-auto border border-gray-700">
+        <button id="btn-mic" onclick="toggleMic()" class="bg-red-500 hover:bg-red-600 h-12 w-12 rounded-full flex items-center justify-center transition-colors shadow-lg">
+            <i class="fa-solid fa-microphone-slash text-xl text-white"></i>
+        </button>
+        <button id="btn-cam" onclick="toggleCam()" class="bg-red-500 hover:bg-red-600 h-12 w-12 rounded-full flex items-center justify-center transition-colors shadow-lg">
+            <i class="fa-solid fa-video-slash text-xl text-white"></i>
+        </button>
+        <button id="btn-screen" onclick="toggleScreen()" class="bg-red-500 hover:bg-red-600 h-12 w-12 rounded-full flex items-center justify-center transition-colors shadow-lg">
+            <i class="fa-solid fa-desktop text-xl text-white"></i>
+        </button>
+        <!-- Кнопка чата -->
+        <button id="btn-chat" onclick="toggleChat()" class="bg-gray-700 hover:bg-gray-600 h-12 w-12 rounded-full flex items-center justify-center transition-colors shadow-lg relative">
+            <i class="fa-solid fa-comments text-xl text-white"></i>
+            <span id="chat-badge" class="absolute top-0 right-0 bg-red-500 w-3 h-3 rounded-full hidden border-2 border-gray-800"></span>
+        </button>
+        <div class="w-px h-12 bg-gray-700 mx-2"></div> <!-- Вертикальный разделитель -->
+        <button onclick="leaveCall()" class="bg-gray-700 hover:bg-red-600 h-12 px-6 rounded-full flex items-center justify-center transition-colors font-bold shadow-lg text-white group">
+            <i class="fa-solid fa-phone-slash mr-2 text-red-400 group-hover:text-white transition-colors"></i> Отключиться
+        </button>
+    </div>
+</footer>
 
 <script>
     let currentRoom = null;
