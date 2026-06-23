@@ -5,133 +5,235 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Task Manager - Голосовые каналы</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/livekit-client@1.15.4/dist/livekit-client.umd.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-</head>
-<body class="bg-gray-900 text-white min-h-screen flex flex-col font-sans">
 
-<header class="bg-gray-800 p-4 shadow-md flex justify-between items-center z-10">
-    <h1 class="text-xl font-bold text-indigo-400">
-        <i class="fa-solid fa-headset mr-2"></i>Task Manager Conference
-    </h1>
-    <div class="flex items-center gap-4">
-        <div id="status-badge" class="px-3 py-1 rounded-full bg-red-500 text-xs font-semibold">
-            Отключен
+    <style>
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(31, 41, 55, 0.5); border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(79, 70, 229, 0.8); border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(99, 102, 241, 1); }
+    </style>
+</head>
+<!-- h-screen и flex позволяют разбить экран на левую (приложение) и правую (чат) колонки -->
+<body class="bg-gray-900 text-white h-screen w-screen flex font-sans overflow-hidden">
+
+<!-- ЛЕВАЯ КОЛОНКА (Основное приложение) -->
+<div class="flex-grow flex flex-col h-full relative transition-all duration-300">
+    <header class="bg-gray-800 p-4 shadow-md flex justify-between items-center z-10 shrink-0">
+        <h1 class="text-xl font-bold text-indigo-400">
+            <i class="fa-solid fa-headset mr-2"></i>Task Manager Conference
+        </h1>
+        <div class="flex items-center gap-4">
+            <div id="status-badge" class="px-3 py-1 rounded-full bg-red-500 text-xs font-semibold">
+                Отключен
+            </div>
+            <button id="btn-logout" onclick="logout()" class="text-gray-400 hover:text-white text-sm hidden transition-colors">
+                <i class="fa-solid fa-right-from-bracket mr-1"></i> Выйти
+            </button>
         </div>
-        <button id="btn-logout" onclick="logout()" class="text-gray-400 hover:text-white text-sm hidden">
-            <i class="fa-solid fa-right-from-bracket mr-1"></i> Выйти
+    </header>
+
+    <main class="flex-grow p-6 flex flex-col items-center justify-center relative overflow-y-auto">
+
+        <div id="auth-screen" class="bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-md">
+            <div class="flex border-b border-gray-700 mb-6 text-center font-semibold">
+                <button id="tab-login" onclick="switchAuthTab('login')" class="w-1/2 pb-3 border-b-2 border-indigo-500 text-indigo-400">Вход</button>
+                <button id="tab-register" onclick="switchAuthTab('register')" class="w-1/2 pb-3 border-b-2 border-transparent text-gray-400 hover:text-gray-200">Регистрация</button>
+            </div>
+            <div class="space-y-4">
+                <div id="reg-name-field" class="hidden">
+                    <label class="block text-sm text-gray-400 mb-1">Имя</label>
+                    <input id="auth-name" type="text" class="w-full p-2.5 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:border-indigo-500 text-white">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Email</label>
+                    <input id="auth-email" type="email" class="w-full p-2.5 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:border-indigo-500 text-white">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Пароль</label>
+                    <input id="auth-password" type="password" class="w-full p-2.5 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:border-indigo-500 text-white">
+                </div>
+                <button id="btn-auth-submit" onclick="handleAuthSubmit()" class="w-full bg-indigo-600 hover:bg-indigo-700 font-bold py-3 rounded-lg transition-colors mt-2">
+                    Войти в аккаунт
+                </button>
+                <p id="auth-error" class="text-red-400 text-sm text-center hidden"></p>
+            </div>
+        </div>
+
+        <div id="dashboard-screen" class="bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-2xl hidden">
+            <div class="mb-6 text-center">
+                <div class="w-20 h-20 bg-indigo-600 rounded-full flex items-center justify-center text-3xl font-bold mx-auto mb-3 shadow-lg">
+                    <i class="fa-solid fa-users"></i>
+                </div>
+                <h2 class="text-2xl font-bold">Ваши команды</h2>
+                <p class="text-gray-400 text-sm mt-1">Выберите голосовой канал для подключения</p>
+            </div>
+            <div id="teams-list" class="space-y-3 max-h-96 overflow-y-auto pr-2 custom-scrollbar">
+                <div class="text-center text-gray-400 py-4">
+                    <i class="fa-solid fa-spinner fa-spin text-2xl mb-2"></i>
+                    <p>Загрузка команд...</p>
+                </div>
+            </div>
+            <p id="dashboard-error" class="text-red-400 text-sm mt-4 text-center hidden"></p>
+        </div>
+
+        <!-- Экран созвона (Обертка flex-wrap заменяет жесткую сетку) -->
+        <div id="call-container" class="w-full flex-grow hidden">
+            <div id="video-grid" class="w-full flex-grow p-4 flex flex-wrap items-center justify-center gap-4 overflow-y-auto content-center">
+                <div id="local-participant" class="relative bg-gray-800 rounded-xl overflow-hidden aspect-video border-2 border-indigo-500 shadow-lg flex items-center justify-center transition-all duration-300">
+                    <div id="local-avatar" class="text-4xl font-bold text-gray-500">ВЫ</div>
+                    <div id="local-video-container" class="absolute inset-0 w-full h-full hidden bg-black"></div>
+                    <div class="absolute bottom-2 left-2 bg-black/70 px-2 py-1 rounded text-sm z-10 flex items-center gap-2">
+                        Вы (Локально)
+                        <i id="local-mic-indicator" class="fa-solid fa-microphone-slash text-red-500 text-xs"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer id="control-bar" class="bg-gray-800 p-4 flex justify-center gap-4 hidden z-10 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] shrink-0">
+        <button id="btn-mic" onclick="toggleMic()" class="bg-red-500 hover:bg-red-600 h-12 w-12 rounded-full flex items-center justify-center transition-colors shadow-lg">
+            <i class="fa-solid fa-microphone-slash text-xl"></i>
+        </button>
+        <button id="btn-cam" onclick="toggleCam()" class="bg-red-500 hover:bg-red-600 h-12 w-12 rounded-full flex items-center justify-center transition-colors shadow-lg">
+            <i class="fa-solid fa-video-slash text-xl"></i>
+        </button>
+        <button id="btn-screen" onclick="toggleScreen()" class="bg-red-500 hover:bg-red-600 h-12 w-12 rounded-full flex items-center justify-center transition-colors shadow-lg">
+            <i class="fa-solid fa-desktop text-xl"></i>
+        </button>
+        <!-- Кнопка чата -->
+        <button id="btn-chat" onclick="toggleChat()" class="bg-gray-700 hover:bg-gray-600 h-12 w-12 rounded-full flex items-center justify-center transition-colors shadow-lg relative ml-2">
+            <i class="fa-solid fa-comments text-xl"></i>
+            <span id="chat-badge" class="absolute top-0 right-0 bg-red-500 w-3 h-3 rounded-full hidden border-2 border-gray-800"></span>
+        </button>
+        <button onclick="leaveCall()" class="bg-gray-700 hover:bg-gray-600 h-12 px-6 rounded-full flex items-center justify-center transition-colors font-bold shadow-lg ml-4">
+            <i class="fa-solid fa-phone-slash mr-2 text-red-400"></i> Отключиться
+        </button>
+    </footer>
+</div> <!-- КОНЕЦ ЛЕВОЙ КОЛОНКИ -->
+
+<!-- ПРАВАЯ КОЛОНКА (ЧАТ) - Встроен в поток (не fixed) -->
+<div id="chat-panel" class="w-[350px] h-full bg-gray-800 border-l border-gray-700 flex flex-col hidden flex-shrink-0 z-40 transition-all duration-300 shadow-2xl">
+    <div class="p-4 border-b border-gray-700 font-bold text-indigo-400 flex justify-between items-center bg-gray-900 shrink-0">
+            <span class="flex items-center gap-2">
+                <i class="fa-solid fa-comments"></i> Чат канала
+            </span>
+        <button onclick="toggleChat()" class="text-gray-400 hover:text-white transition-colors">
+            <i class="fa-solid fa-xmark text-xl"></i>
         </button>
     </div>
-</header>
-
-<main class="flex-grow p-6 flex flex-col items-center justify-center relative">
-
-    <div id="auth-screen" class="bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-md">
-        <div class="flex border-b border-gray-700 mb-6 text-center font-semibold">
-            <button id="tab-login" onclick="switchAuthTab('login')" class="w-1/2 pb-3 border-b-2 border-indigo-500 text-indigo-400">Вход</button>
-            <button id="tab-register" onclick="switchAuthTab('register')" class="w-1/2 pb-3 border-b-2 border-transparent text-gray-400 hover:text-gray-200">Регистрация</button>
-        </div>
-
-        <div class="space-y-4">
-            <div id="reg-name-field" class="hidden">
-                <label class="block text-sm text-gray-400 mb-1">Имя</label>
-                <input id="auth-name" type="text" class="w-full p-2.5 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:border-indigo-500">
-            </div>
-            <div>
-                <label class="block text-sm text-gray-400 mb-1">Email</label>
-                <input id="auth-email" type="email" class="w-full p-2.5 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:border-indigo-500">
-            </div>
-            <div>
-                <label class="block text-sm text-gray-400 mb-1">Пароль</label>
-                <input id="auth-password" type="password" class="w-full p-2.5 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:border-indigo-500">
-            </div>
-
-            <button id="btn-auth-submit" onclick="handleAuthSubmit()" class="w-full bg-indigo-600 hover:bg-indigo-700 font-bold py-3 rounded-lg transition-colors mt-2">
-                Войти в аккаунт
-            </button>
-            <p id="auth-error" class="text-red-400 text-sm text-center hidden"></p>
-        </div>
+    <div id="chat-messages" class="flex-grow p-4 space-y-3 overflow-y-auto custom-scrollbar text-sm">
+        <div class="text-center text-xs text-gray-500 my-2">Добро пожаловать в чат! Сообщения не сохраняются.</div>
     </div>
-
-    <div id="dashboard-screen" class="bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-xl text-center hidden">
-        <div class="mb-6">
-            <div class="w-20 h-20 bg-indigo-600 rounded-full flex items-center justify-center text-3xl font-bold mx-auto mb-3 shadow-lg">
-                <i class="fa-solid fa-user-tie"></i>
-            </div>
-            <h2 class="text-2xl font-bold">Добро пожаловать обратно!</h2>
-            <p class="text-gray-400 text-sm mt-1">Выберите команду для подключения к голосовому каналу</p>
-        </div>
-
-        <div class="bg-gray-700/50 p-6 rounded-lg border border-gray-600 max-w-sm mx-auto space-y-4">
-            <div>
-                <label class="block text-sm text-gray-400 mb-1 text-left">Идентификатор команды (ID)</label>
-                <input id="teamIdInput" type="number" placeholder="Например: 1"
-                       class="w-full p-2.5 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:border-indigo-500 font-mono text-center">
-            </div>
-            <button onclick="startTeamCall()" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg transition-colors shadow-md">
-                <i class="fa-solid fa-phone mr-2"></i> Войти в голосовой канал
-            </button>
-        </div>
-        <p id="dashboard-error" class="text-red-400 text-sm mt-4 hidden"></p>
+    <div class="p-4 border-t border-gray-800 bg-gray-900 flex gap-2 shrink-0">
+        <input id="chat-input" type="text" placeholder="Сообщение..." onkeypress="handleChatEnter(event)"
+               class="flex-grow p-2.5 rounded-lg bg-gray-700 border border-gray-600 focus:outline-none focus:border-indigo-500 text-white text-sm shadow-inner">
+        <button onclick="sendChatMessage()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 rounded-lg transition-colors shadow-md">
+            <i class="fa-solid fa-paper-plane"></i>
+        </button>
     </div>
-
-    <div id="video-grid" class="w-full max-w-6xl grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 hidden">
-        <div id="local-participant" class="relative bg-gray-800 rounded-xl overflow-hidden aspect-video border-2 border-indigo-500 flex items-center justify-center shadow-lg">
-            <div id="local-avatar" class="text-4xl font-bold text-gray-500">ВЫ</div>
-            <div id="local-video-container" class="absolute inset-0 w-full h-full hidden"></div>
-            <div class="absolute bottom-2 left-2 bg-black/70 px-2 py-1 rounded text-sm z-10">
-                Вы (Локально)
-            </div>
-        </div>
-    </div>
-
-</main>
-
-<footer id="control-bar" class="bg-gray-800 p-4 flex justify-center gap-4 hidden z-10 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
-    <button id="btn-mic" onclick="toggleMic()" class="bg-gray-700 hover:bg-gray-600 h-12 w-12 rounded-full flex items-center justify-center transition-colors">
-        <i class="fa-solid fa-microphone text-xl"></i>
-    </button>
-    <button id="btn-cam" onclick="toggleCam()" class="bg-gray-700 hover:bg-gray-600 h-12 w-12 rounded-full flex items-center justify-center transition-colors">
-        <i class="fa-solid fa-video text-xl"></i>
-    </button>
-    <button onclick="leaveCall()" class="bg-red-600 hover:bg-red-700 h-12 px-6 rounded-full flex items-center justify-center transition-colors font-bold">
-        <i class="fa-solid fa-phone-slash mr-2"></i> Отключиться
-    </button>
-</footer>
+</div>
 
 <script>
     let currentRoom = null;
     let isMicOn = false;
     let isCamOn = false;
-    let authMode = 'login'; // 'login' или 'register'
+    let isScreenShare = false;
+    let isChatOpen = false;
+    let authMode = 'login';
 
-    // Автоматическая проверка сессии при загрузке страницы
     window.onload = function() {
         const token = localStorage.getItem("task_manager_jwt");
         if (token) {
             showScreen('dashboard-screen');
             document.getElementById('btn-logout').classList.remove('hidden');
+            loadUserTeams();
         } else {
             showScreen('auth-screen');
         }
     };
 
-    // Переключение экранов
     function showScreen(screenId) {
-        document.getElementById('auth-screen').classList.add('hidden');
-        document.getElementById('dashboard-screen').classList.add('hidden');
-        document.getElementById('video-grid').classList.add('hidden');
+        ['auth-screen', 'dashboard-screen', 'call-container'].forEach(id => {
+            document.getElementById(id).classList.add('hidden');
+        });
+
         document.getElementById('control-bar').classList.add('hidden');
         document.getElementById('control-bar').classList.remove('flex');
 
         document.getElementById(screenId).classList.remove('hidden');
-        if (screenId === 'video-grid') {
+
+        if (screenId === 'call-container') {
             document.getElementById('control-bar').classList.remove('hidden');
             document.getElementById('control-bar').classList.add('flex');
+            updateVideoGrid();
         }
     }
 
-    // Переключение между Входом и Регистрацией
+    // --- ФУНКЦИЯ СОЗДАНИЯ КАРТОЧКИ УЧАСТНИКА ---
+    function getOrCreateParticipantWrapper(participant) {
+        let wrapper = document.getElementById(`participant-${participant.identity}`);
+
+        if (!wrapper) {
+            wrapper = document.createElement('div');
+            wrapper.id = `participant-${participant.identity}`;
+            wrapper.className = "relative bg-gray-800 rounded-xl overflow-hidden aspect-video border border-gray-700 shadow-lg flex items-center justify-center transition-all duration-300";
+
+            const pName = participant.name || participant.identity;
+            const avatar = document.createElement('div');
+            avatar.id = `avatar-${participant.identity}`;
+            avatar.className = "text-3xl font-bold text-gray-500 uppercase bg-gray-700 h-20 w-20 rounded-full flex items-center justify-center shadow-inner z-10";
+            avatar.innerText = pName.substring(0, 2);
+
+            const nameLabel = document.createElement('div');
+            nameLabel.className = "absolute bottom-2 left-2 bg-black/70 px-2 py-1 rounded text-sm z-20 flex items-center gap-2";
+            nameLabel.innerHTML = `${pName} <i id="mic-status-${participant.identity}" class="fa-solid fa-microphone text-green-400 text-xs hidden"></i>`;
+
+            wrapper.appendChild(avatar);
+            wrapper.appendChild(nameLabel);
+            document.getElementById('video-grid').appendChild(wrapper);
+
+            updateVideoGrid(); // Пересчитываем сетку!
+        }
+        return wrapper;
+    }
+
+    // --- УМНАЯ СЕТКА ВИДЕОКАРТОЧЕК ---
+    function updateVideoGrid() {
+        const grid = document.getElementById('video-grid');
+        if (!grid) return;
+
+        const count = grid.children.length;
+
+        // Базовый класс карточки (дизайн, радиус, рамки)
+        let baseClass = "relative bg-gray-800 rounded-xl overflow-hidden aspect-video shadow-lg flex items-center justify-center transition-all duration-300 ";
+        let sizingClass = "";
+
+        // Логика калькулятора как в Discord
+        if (count === 1) {
+            // Один человек - занимает максимум места (почти во весь экран)
+            sizingClass = "w-full max-w-5xl max-h-[80vh]";
+        } else if (count === 2) {
+            // Двое - делят экран пополам
+            sizingClass = "w-full md:w-[48%] max-w-3xl max-h-[45vh] md:max-h-[80vh]";
+        } else if (count === 3 || count === 4) {
+            // 3-4 человека - сетка 2x2
+            sizingClass = "w-full sm:w-[48%] lg:w-[48%] max-w-2xl max-h-[40vh]";
+        } else {
+            // 5 и больше - сетка 3x3
+            sizingClass = "w-full sm:w-[48%] lg:w-[31%] max-w-xl max-h-[30vh]";
+        }
+
+        // Применяем классы ко всем карточкам
+        Array.from(grid.children).forEach(child => {
+            // Оставляем цветную рамку для нас, серую для остальных
+            let borderClass = child.id === 'local-participant' ? 'border-2 border-indigo-500' : 'border border-gray-700';
+            child.className = baseClass + sizingClass + " " + borderClass;
+        });
+    }
+
     function switchAuthTab(mode) {
         authMode = mode;
         const tabLogin = document.getElementById('tab-login');
@@ -153,7 +255,6 @@
         }
     }
 
-    // Обработка отправки формы Авторизации / Регистрации
     async function handleAuthSubmit() {
         const email = document.getElementById('auth-email').value.trim();
         const password = document.getElementById('auth-password').value.trim();
@@ -161,18 +262,14 @@
         const errorEl = document.getElementById('auth-error');
 
         if (!email || !password || (authMode === 'register' && !firstName)) {
-            errorEl.innerText = "Пожалуйста, заполните все поля";
+            errorEl.innerText = "Заполните все необходимые поля";
             errorEl.classList.remove('hidden');
             return;
         }
 
         errorEl.classList.add('hidden');
-
-        // ВНИМАНИЕ: Проверь соответствие путей и структуры JSON со своим бэкендом
         const url = authMode === 'login' ? '/auth/login' : '/auth/register';
-        const bodyData = authMode === 'login'
-            ? { email, password }
-            : { email, password, firstName };
+        const bodyData = authMode === 'login' ? { email, password } : { email, password, firstName };
 
         try {
             const response = await fetch(url, {
@@ -182,20 +279,16 @@
             });
 
             const data = await response.json();
+            if (!response.ok) throw new Error(data.message || "Ошибка аутентификации");
 
-            if (!response.ok) {
-                throw new Error(data.message || "Ошибка аутентификации");
-            }
-
-            // Сохраняем Спринговый JWT-токен (ВНИМАНИЕ: Проверь имя поля в твоем DTO, например data.token или data.accessToken)
             const jwtToken = data.token || data.accessToken;
-            if (!jwtToken) {
-                throw new Error("Сервер не вернул токен авторизации");
-            }
+            if (!jwtToken) throw new Error("Токен не получен");
 
             localStorage.setItem("task_manager_jwt", jwtToken);
             document.getElementById('btn-logout').classList.remove('hidden');
+
             showScreen('dashboard-screen');
+            loadUserTeams();
 
         } catch (err) {
             errorEl.innerText = err.message;
@@ -203,127 +296,245 @@
         }
     }
 
-    // --- ВХОД В ГОЛОСОВОЙ КАНАЛ ПО ОДНОЙ КНОПКЕ ---
-    async function startTeamCall() {
-        const teamId = document.getElementById('teamIdInput').value;
+    function logout() {
+        if (currentRoom) currentRoom.disconnect();
+        localStorage.removeItem("task_manager_jwt");
+        document.getElementById('btn-logout').classList.add('hidden');
+        showScreen('auth-screen');
+    }
+
+    async function loadUserTeams() {
+        const container = document.getElementById('teams-list');
+        const appToken = localStorage.getItem("task_manager_jwt");
+
+        try {
+            const response = await fetch('/teams/my', {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${appToken}` }
+            });
+
+            if (response.status === 401 || response.status === 403) {
+                logout();
+                return;
+            }
+
+            if (!response.ok) throw new Error("Ошибка при загрузке команд");
+
+            const teams = await response.json();
+            container.innerHTML = '';
+
+            if (!Array.isArray(teams) || teams.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center text-gray-400 py-6 bg-gray-700/30 rounded-lg border border-gray-700 border-dashed">
+                        <i class="fa-solid fa-ghost text-3xl mb-3 opacity-50"></i>
+                        <p>Вы еще не состоите ни в одной команде.</p>
+                    </div>`;
+                return;
+            }
+
+            teams.forEach(team => {
+                const teamName = team.name || `Команда #${team.id}`;
+                const letter = teamName.substring(0, 1).toUpperCase();
+
+                const cardHTML = `
+                    <div class="bg-gray-700/50 p-4 rounded-xl border border-gray-600 flex justify-between items-center hover:bg-gray-700 transition-colors shadow-sm group">
+                        <div class="flex items-center">
+                            <div class="w-12 h-12 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center mr-4 font-bold text-xl border border-indigo-500/30">
+                                ${letter}
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-lg leading-tight text-gray-100">${teamName}</h3>
+                                <span class="text-xs text-gray-400">ID: ${team.id}</span>
+                            </div>
+                        </div>
+                        <button onclick="startTeamCall(${team.id})" class="bg-green-600 hover:bg-green-500 text-white font-bold py-2.5 px-5 rounded-lg transition-all shadow-md transform group-hover:scale-105 flex items-center">
+                            <i class="fa-solid fa-phone mr-2"></i> Войти
+                        </button>
+                    </div>
+                `;
+                container.insertAdjacentHTML('beforeend', cardHTML);
+            });
+        } catch (err) {
+            container.innerHTML = `<p class="text-red-400 text-center py-4"><i class="fa-solid fa-triangle-exclamation mr-2"></i>${err.message}</p>`;
+        }
+    }
+
+    async function startTeamCall(teamId) {
         const errorEl = document.getElementById('dashboard-error');
         const statusBadge = document.getElementById('status-badge');
         const appToken = localStorage.getItem("task_manager_jwt");
 
-        if (!teamId) {
-            errorEl.innerText = "Введите ID команды";
-            errorEl.classList.remove('hidden');
-            return;
-        }
-
         errorEl.classList.add('hidden');
-        statusBadge.innerText = "Запрос пропуска...";
+        statusBadge.innerText = "Авторизация созвона...";
         statusBadge.className = "px-3 py-1 rounded-full bg-yellow-500 text-xs font-semibold text-black";
 
         try {
-            // 1. Автоматический запрос токена созвона у твоего LiveKitController
             const response = await fetch(`/calls/team/${teamId}/token`, {
                 method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${appToken}`
-                }
+                headers: { 'Authorization': `Bearer ${appToken}` }
             });
 
-            if (response.status === 401 || response.status === 403) {
-                throw new Error("Сессия просрочена или у вас нет доступа к этой команде");
-            }
-
+            if (!response.ok) throw new Error("Нет доступа к комнате");
             const data = await response.json();
-            const liveKitToken = data.token; // Наш сгенерированный токен медиа-сервера
+            const liveKitToken = data.token;
 
-            // 2. Инициализация комнаты LiveKit
             const room = new LivekitClient.Room();
             currentRoom = room;
 
-            // Слушаем появление чужих медиапотоков
-            room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => {
-                let wrapper = document.getElementById(`participant-${participant.identity}`);
-
-                if (!wrapper) {
-                    wrapper = document.createElement('div');
-                    wrapper.id = `participant-${participant.identity}`;
-                    wrapper.className = "relative bg-gray-800 rounded-xl overflow-hidden aspect-video border border-gray-700 shadow-lg flex items-center justify-center";
-
-                    const avatar = document.createElement('div');
-                    avatar.id = `avatar-${participant.identity}`;
-                    avatar.className = "text-2xl font-bold text-gray-500 uppercase";
-                    avatar.innerText = (participant.name || participant.identity).substring(0, 2);
-
-                    const nameLabel = document.createElement('div');
-                    nameLabel.className = "absolute bottom-2 left-2 bg-black/70 px-2 py-1 rounded text-sm z-10";
-                    nameLabel.innerText = participant.name || participant.identity;
-
-                    wrapper.appendChild(avatar);
-                    wrapper.appendChild(nameLabel);
-                    document.getElementById('video-grid').appendChild(wrapper);
-                }
-
-                const element = track.attach();
-                if (track.kind === LivekitClient.Track.Kind.Video) {
-                    element.className = "absolute inset-0 w-full h-full object-cover";
-                    document.getElementById(`avatar-${participant.identity}`).classList.add('hidden');
-                    wrapper.appendChild(element);
-                } else if (track.kind === LivekitClient.Track.Kind.Audio) {
-                    wrapper.appendChild(element); // Невидимый тег <audio>
+            // Обработка текстового чата
+            room.on(LivekitClient.RoomEvent.DataReceived, (payload, participant, kind, topic) => {
+                const strData = new TextDecoder().decode(payload);
+                const senderName = participant ? (participant.name || participant.identity) : "Аноним";
+                appendChatMessage(senderName, strData, false);
+                if (!isChatOpen) {
+                    document.getElementById('chat-badge').classList.remove('hidden');
                 }
             });
 
-            // Слушаем отключение чужих потоков
+            // НОВОЕ: Кто-то просто зашел в комнату (даже без камеры и микрофона)
+            room.on(LivekitClient.RoomEvent.ParticipantConnected, (participant) => {
+                getOrCreateParticipantWrapper(participant);
+            });
+
+            // Кто-то подключил видео/аудио
+            room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => {
+                // Создаем карточку, если ее еще нет, или просто получаем существующую
+                const wrapper = getOrCreateParticipantWrapper(participant);
+
+                const element = track.attach();
+
+                if (track.kind === LivekitClient.Track.Kind.Video) {
+                    element.className = "absolute inset-0 w-full h-full object-cover z-0";
+                    document.getElementById(`avatar-${participant.identity}`).classList.add('hidden');
+                    // Важно: вставляем видео ПЕРЕД меткой с именем, чтобы имя было поверх него
+                    wrapper.insertBefore(element, wrapper.firstChild);
+                } else if (track.kind === LivekitClient.Track.Kind.Audio) {
+                    wrapper.appendChild(element);
+                    const micIcon = document.getElementById(`mic-status-${participant.identity}`);
+                    if(micIcon) micIcon.classList.remove('hidden');
+                }
+            });
+
+            // Кто-то отключил видео/аудио
             room.on(LivekitClient.RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
                 track.detach().forEach(el => el.remove());
                 if (track.kind === LivekitClient.Track.Kind.Video) {
                     const avatar = document.getElementById(`avatar-${participant.identity}`);
                     if (avatar) avatar.classList.remove('hidden');
+                } else if (track.kind === LivekitClient.Track.Kind.Audio) {
+                    const micIcon = document.getElementById(`mic-status-${participant.identity}`);
+                    if(micIcon) micIcon.classList.add('hidden');
                 }
             });
 
-            // Полный выход участника
+            // Кто-то полностью покинул комнату
             room.on(LivekitClient.RoomEvent.ParticipantDisconnected, (participant) => {
                 const wrapper = document.getElementById(`participant-${participant.identity}`);
-                if (wrapper) wrapper.remove();
+                if (wrapper) {
+                    wrapper.remove();
+                    updateVideoGrid(); // Пересчитываем сетку!
+                }
             });
 
-            // 3. Подключение к WebRTC сокету
             await room.connect('ws://127.0.0.1:7880', liveKitToken);
 
-            // Переключаем интерфейс на экран звонка
-            showScreen('video-grid');
+            // НОВОЕ: Отрисовываем карточки для тех, кто УЖЕ был в комнате до нас
+            room.participants.forEach(participant => {
+                getOrCreateParticipantWrapper(participant);
+            });
+
+            showScreen('call-container');
             statusBadge.innerText = "В сети";
             statusBadge.className = "px-3 py-1 rounded-full bg-green-500 text-xs font-semibold text-white";
 
-            // 4. Запрос микрофона
-            try {
-                await room.localParticipant.setMicrophoneEnabled(true);
-                isMicOn = true;
-                updateBtnUI('btn-mic', isMicOn, 'fa-microphone', 'fa-microphone-slash');
-            } catch (e) {
-                console.warn("Микрофон отсутствует или заблокирован:", e);
-            }
+            isMicOn = false;
+            isCamOn = false;
+            isScreenShare = false;
+            updateBtnUI('btn-mic', false, 'fa-microphone', 'fa-microphone-slash');
+            updateBtnUI('btn-cam', false, 'fa-video', 'fa-video-slash');
+            updateBtnUI('btn-screen', false, 'fa-desktop', 'fa-desktop');
 
-            // 5. Запрос камеры
-            try {
-                await room.localParticipant.setCameraEnabled(true);
-                isCamOn = true;
-                updateBtnUI('btn-cam', isCamOn, 'fa-video', 'fa-video-slash');
-                renderLocalVideo();
-            } catch (e) {
-                console.warn("Камера отсутствует или заблокирована:", e);
-            }
+            // Очищаем историю чата
+            document.getElementById('chat-messages').innerHTML = '<div class="text-center text-xs text-gray-500 my-2">Добро пожаловать в чат! Сообщения не сохраняются после выхода.</div>';
 
         } catch (err) {
             errorEl.innerText = err.message;
             errorEl.classList.remove('hidden');
-            statusBadge.innerText = "Ошибка";
+            statusBadge.innerText = "Отключен";
             statusBadge.className = "px-3 py-1 rounded-full bg-red-500 text-xs font-semibold";
         }
     }
 
-    // --- ФУНКЦИИ УПРАВЛЕНИЯ УСТРОЙСТВАМИ ---
+    function toggleChat() {
+        isChatOpen = !isChatOpen;
+        const chatPanel = document.getElementById('chat-panel');
+        const chatBtn = document.getElementById('btn-chat');
+
+        if (isChatOpen) {
+            chatPanel.classList.remove('hidden');
+            chatBtn.classList.remove('bg-gray-700', 'hover:bg-gray-600');
+            chatBtn.classList.add('bg-indigo-600', 'hover:bg-indigo-700');
+            document.getElementById('chat-badge').classList.add('hidden');
+        } else {
+            chatPanel.classList.add('hidden');
+            chatBtn.classList.remove('bg-indigo-600', 'hover:bg-indigo-700');
+            chatBtn.classList.add('bg-gray-700', 'hover:bg-gray-600');
+        }
+    }
+
+    function handleChatEnter(event) {
+        if (event.key === 'Enter') sendChatMessage();
+    }
+
+    async function sendChatMessage() {
+        if (!currentRoom) return;
+        const input = document.getElementById('chat-input');
+        const text = input.value.trim();
+        if (!text) return;
+
+        try {
+            const encodedData = new TextEncoder().encode(text);
+            await currentRoom.localParticipant.publishData(encodedData, LivekitClient.DataPacket_Kind.RELIABLE);
+            appendChatMessage("Вы", text, true);
+            input.value = '';
+        } catch (e) {
+            console.error("Ошибка отправки:", e);
+            alert("Не удалось отправить сообщение");
+        }
+    }
+
+    function appendChatMessage(sender, text, isSelf) {
+        const container = document.getElementById('chat-messages');
+        const msgWrapper = document.createElement('div');
+        msgWrapper.className = isSelf ? "flex flex-col items-end" : "flex flex-col items-start";
+        const bubbleClass = isSelf
+            ? "bg-indigo-600 text-white px-3 py-2 rounded-lg rounded-br-none max-w-[90%] break-words"
+            : "bg-gray-700 text-white px-3 py-2 rounded-lg rounded-bl-none max-w-[90%] break-words";
+        msgWrapper.innerHTML = `
+            <div class="${bubbleClass}">${text}</div>
+            <span class="text-[10px] text-gray-500 mt-1">${sender}</span>
+        `;
+        container.appendChild(msgWrapper);
+        container.scrollTop = container.scrollHeight;
+    }
+
+    async function toggleScreen(){
+        if(!currentRoom) return;
+        isScreenShare = !isScreenShare;
+        try {
+            await currentRoom.localParticipant.setScreenShareEnabled(isScreenShare, {audio:false, displaySurface: 'window'});
+            updateBtnUI('btn-screen', isScreenShare, 'fa-desktop', 'fa-desktop');
+        } catch (e) {
+            if (e.name === 'NotAllowedError' || e.name === 'AbortError') {
+                console.log("Пользователь отменил выбор экрана.");
+            } else {
+                console.error("Системная ошибка шаринга:", e);
+                alert("Ошибка получения записи экрана: " + e.message);
+            }
+            isScreenShare = false;
+            updateBtnUI('btn-screen', false, 'fa-desktop', 'fa-desktop');
+        }
+    }
 
     async function toggleMic() {
         if (!currentRoom) return;
@@ -331,8 +542,10 @@
         try {
             await currentRoom.localParticipant.setMicrophoneEnabled(isMicOn);
             updateBtnUI('btn-mic', isMicOn, 'fa-microphone', 'fa-microphone-slash');
+            const micInd = document.getElementById('local-mic-indicator');
+            micInd.className = isMicOn ? "fa-solid fa-microphone text-green-400 text-xs" : "fa-solid fa-microphone-slash text-red-500 text-xs";
         } catch (e) {
-            alert("Ошибка доступа к микрофону");
+            alert("Ошибка доступа к микрофону. Разрешите доступ в браузере.");
             isMicOn = false;
         }
     }
@@ -352,7 +565,7 @@
                 document.getElementById('local-avatar').classList.remove('hidden');
             }
         } catch (e) {
-            alert("Камера не найдена или заблокирована");
+            alert("Камера не найдена или заблокирована.");
             isCamOn = false;
         }
     }
@@ -366,7 +579,7 @@
             container.innerHTML = '';
             const videoEl = cameraPublication.track.attach();
             videoEl.className = "w-full h-full object-cover";
-            videoEl.style.transform = 'scaleX(-1)'; // Эффект зеркала
+            videoEl.style.transform = 'scaleX(-1)';
             container.appendChild(videoEl);
 
             avatar.classList.add('hidden');
@@ -378,31 +591,39 @@
         const btn = document.getElementById(btnId);
         const icon = btn.querySelector('i');
         if (isActive) {
-            btn.className = "bg-gray-700 hover:bg-gray-600 h-12 w-12 rounded-full flex items-center justify-center transition-colors";
-            icon.className = `fa-solid ${iconOn} text-xl`;
+            btn.className = "bg-gray-700 hover:bg-gray-600 h-12 w-12 rounded-full flex items-center justify-center transition-colors shadow-lg";
+            icon.className = `fa-solid ${iconOn} text-xl text-white`;
         } else {
-            btn.className = "bg-red-500 hover:bg-red-600 h-12 w-12 rounded-full flex items-center justify-center transition-colors";
-            icon.className = `fa-solid ${iconOff} text-xl`;
+            btn.className = "bg-red-500 hover:bg-red-600 h-12 w-12 rounded-full flex items-center justify-center transition-colors shadow-lg";
+            icon.className = `fa-solid ${iconOff} text-xl text-white`;
         }
     }
 
-    // Отключение от созвона и возврат в кабинет
     function leaveCall() {
         if (currentRoom) {
             currentRoom.disconnect();
+            currentRoom = null;
         }
         showScreen('dashboard-screen');
         document.getElementById('status-badge').innerText = "Отключен";
         document.getElementById('status-badge').className = "px-3 py-1 rounded-full bg-red-500 text-xs font-semibold";
-    }
+        document.getElementById('local-video-container').innerHTML = '';
+        document.getElementById('local-video-container').classList.add('hidden');
+        document.getElementById('local-avatar').classList.remove('hidden');
 
-    // Выход из учетной записи
-    function logout() {
-        if (currentRoom) currentRoom.disconnect();
-        localStorage.removeItem("task_manager_jwt");
-        document.getElementById('btn-logout').classList.add('hidden');
-        showScreen('auth-screen');
+        // Закрываем чат
+        document.getElementById('chat-panel').classList.add('hidden');
+        isChatOpen = false;
+        updateBtnUI('btn-chat', false, 'fa-comments', 'fa-comments');
+
+        // Очищаем чужие карточки из сетки
+        const grid = document.getElementById('video-grid');
+        Array.from(grid.children).forEach(child => {
+            if (child.id !== 'local-participant') child.remove();
+        });
+        updateVideoGrid();
     }
 </script>
+
 </body>
 </html>
