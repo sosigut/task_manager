@@ -7,10 +7,7 @@ import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import org.example.annotation.TrackTaskHistory;
 import org.example.config.cache.CacheInvalidationService;
-import org.example.dto.CreateTaskRequestDto;
-import org.example.dto.TaskHistoryResponseDto;
-import org.example.dto.TaskResponseDto;
-import org.example.dto.UpdateTaskRequestDto;
+import org.example.dto.*;
 import org.example.entity.*;
 import org.example.exception.ForbiddenException;
 import org.example.exception.NotFoundException;
@@ -18,6 +15,8 @@ import org.example.mapper.TaskHistoryMapper;
 import org.example.mapper.TaskMapper;
 import org.example.pagination.*;
 import org.example.repository.*;
+import org.example.util.LexoRankUtils;
+import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
@@ -187,6 +186,53 @@ public class TaskService {
         );
     }
 
+    private void validateStatusTransition(TaskEntity task, Status newStatus, TeamMemberEntity membership) {
+        UserEntity currentUser = membership.getUser();
+        Status oldStatus = task.getStatus();
+
+        if (membership.getRole() == TeamRole.MEMBER) {
+            if (!currentUser.getId().equals(task.getAssignee().getId())) {
+                throw new ForbiddenException("Только исполнитель задачи может изменить ее статус");
+            }
+
+            if (newStatus == Status.DONE) {
+                throw new ForbiddenException("Недостаточно прав доступа");
+            }
+
+            Set<Status> allowedNewStatuses = ALLOWED_TRANSITIONS.get(oldStatus);
+            if (allowedNewStatuses == null || !allowedNewStatuses.contains(newStatus)) {
+                throw new ForbiddenException(
+                        String.format("Недопустимый переход статуса: %s -> %s.", oldStatus, newStatus)
+                );
+            }
+        }
+    }
+
+    @Transactional
+    public void moveTask(Long taskId, MoveTaskRequestDto dto){
+
+        TaskEntity task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new NotFoundException("Task not found"));
+
+        if (!task.getStatus().equals(dto.getNewStatus())) {
+            UserEntity currentUser = userService.getCurrentUser();
+            TeamMemberEntity membership = teamAccessService.checkMembership(task.getProject().getTeam(), currentUser);
+            validateStatusTransition(task, dto.getNewStatus(), membership);
+            task.setStatus(dto.getNewStatus());
+        }
+
+        String prevRank = (dto.getPrevTaskId() != null) ?
+                taskRepository.findById(dto.getPrevTaskId()).orElseThrow().getLexoRank() : null;
+
+        String nextRank = (dto.getNextTaskId() != null) ?
+                taskRepository.findById(dto.getNextTaskId()).orElseThrow().getLexoRank() : null;
+
+        task.setLexoRank(LexoRankUtils.getBetween(prevRank, nextRank));
+
+        taskRepository.save(task);
+
+    }
+
     @Transactional
     @PreAuthorize("isAuthenticated()")
     @TrackTaskHistory
@@ -206,22 +252,7 @@ public class TaskService {
 
             Status oldStatus = task.getStatus();
 
-            if (membership.getRole() == TeamRole.MEMBER &&
-                    !currentUser.getId().equals(task.getAssignee().getId())) {
-                throw new ForbiddenException("Только исполнитель задачи может изменить ее статус");
-            }
-
-            if (membership.getRole() == TeamRole.MEMBER && newStatus == Status.DONE) {
-                throw new ForbiddenException("Недостаточно прав доступа");
-            }
-
-            if (membership.getRole() == TeamRole.MEMBER) {
-                Set<Status> allowedNewStatuses = ALLOWED_TRANSITIONS.get(oldStatus);
-
-                if (allowedNewStatuses == null || !allowedNewStatuses.contains(newStatus)) {
-                    throw new ForbiddenException(String.format("Недопустимый переход статуса: %s -> %s.", oldStatus, newStatus));
-                }
-            }
+            validateStatusTransition(task, newStatus, membership);
 
             task.setStatus(newStatus);
             taskRepository.save(task);
