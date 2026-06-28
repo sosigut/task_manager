@@ -39,6 +39,9 @@ public class TaskEntity implements KeysetEntity {
     @JoinColumn(name = "user_id", nullable = false)
     private UserEntity assignee; //User, тот кто будет работать над задачей
 
+    @Column(nullable = false, length = 255)
+    private String lexoRank;
+
     @Column(nullable = false)
     private LocalDateTime createdAt;
 }

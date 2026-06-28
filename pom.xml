@@ -66,6 +66,12 @@
             <artifactId>spring-boot-starter-cache</artifactId>
         </dependency>
 
+        <dependency>
+            <groupId>io.livekit</groupId>
+            <artifactId>livekit-server</artifactId>
+            <version>0.8.1</version>
+        </dependency>
+
         <!-- Spring boot tests -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
