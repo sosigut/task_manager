@@ -5,11 +5,13 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.example.dto.ErrorResponseDto;
 import org.example.exception.ForbiddenException;
 import org.example.exception.NotFoundException;
+import org.example.exception.UserAlreadyExistsException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -24,6 +26,23 @@ import java.util.Map;
 public class GlobalExceptionHandler {
 
     private final Logger logger = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+
+    @ExceptionHandler(BadCredentialsException.class)
+    public ResponseEntity<ErrorResponseDto> handleBadCredentialsException(
+            BadCredentialsException ex,
+            HttpServletRequest request) {
+
+        ErrorResponseDto error = ErrorResponseDto.builder()
+                .timestamp(LocalDateTime.now())
+                .status(HttpStatus.UNAUTHORIZED.value())
+                .error("Unauthorized")
+                .message("Неверный email или пароль")
+                .path(request.getRequestURI())
+                .build();
+
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
+    }
 
     //ForbiddenEx 403
     @ExceptionHandler(ForbiddenException.class)
@@ -41,6 +60,22 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
 
+    }
+
+    @ExceptionHandler(UserAlreadyExistsException.class)
+    public ResponseEntity<ErrorResponseDto> handleUserAlreadyExistsException(
+            UserAlreadyExistsException ex,
+            HttpServletRequest request) {
+
+        ErrorResponseDto error = ErrorResponseDto.builder()
+                .timestamp(LocalDateTime.now())
+                .status(HttpStatus.CONFLICT.value())  // 409 Conflict
+                .error("Conflict")
+                .message("Пользователь с таким email уже существует")
+                .path(request.getRequestURI())
+                .build();
+
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
     }
 
     //400
@@ -116,7 +151,7 @@ public class GlobalExceptionHandler {
             InvalidFormatException invalidFormatEx = (InvalidFormatException) cause;
 
             if(invalidFormatEx.getTargetType() != null
-            && invalidFormatEx.getTargetType().isEnum()){
+                    && invalidFormatEx.getTargetType().isEnum()){
 
                 Class<?> enumType = invalidFormatEx.getTargetType();
                 Object[] enumValues = enumType.getEnumConstants();

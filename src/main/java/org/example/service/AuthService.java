@@ -10,13 +10,14 @@ import org.example.dto.RegisterRequestDto;
 import org.example.dto.UserResponseDto;
 import org.example.entity.Role;
 import org.example.entity.UserEntity;
+import org.example.exception.UserAlreadyExistsException;
 import org.example.mapper.UserMapper;
 import org.example.repository.UserRepository;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.Locale;
-import java.util.Random;
 
 @Slf4j
 @Service
@@ -28,7 +29,7 @@ public class AuthService {
     private final UserMapper mapper;
     private final JwtService jwtService;
 
-    public UserResponseDto register (RegisterRequestDto registerRequestDto) throws Exception{
+    public UserResponseDto register (RegisterRequestDto registerRequestDto){
         String email = registerRequestDto.getEmail().toLowerCase().trim();
 
         String publicUid = RandomStringUtils.randomAlphanumeric(10).toUpperCase(Locale.ROOT);
@@ -38,7 +39,7 @@ public class AuthService {
         }
 
         if (userRepository.existsByEmail(email)) {
-            throw new Exception("Email already exists");
+            throw new UserAlreadyExistsException("Email already exists");
         }
 
         String hashedPassword = passwordEncoderConfig.hashPassword(registerRequestDto.getPassword());
@@ -58,22 +59,19 @@ public class AuthService {
         return mapper.toDto(userEntity);
     }
 
-    public LoginResponseDto login (LoginRequestDto loginRequestDto) throws Exception {
+    public LoginResponseDto login (LoginRequestDto loginRequestDto){
 
         String email = loginRequestDto.getEmail().toLowerCase().trim();
         UserEntity user = userRepository.findByEmail(email)
-                .orElseThrow(() -> {
-                    return new Exception("User not found");
-                });
+                .orElseThrow(() -> new BadCredentialsException("Invalid email or password"));
 
         boolean passwordMatches = passwordEncoderConfig.passwordEncoder().matches(
                 loginRequestDto.getPassword(), user.getPassword()
         );
 
         if (!passwordMatches) {
-            throw new Exception("Wrong password");
+            throw new BadCredentialsException("Invalid email or password");
         }
-
         String accessToken = jwtService.generateAccessToken(user);
         String refreshToken = jwtService.generateRefreshToken(user);
 
